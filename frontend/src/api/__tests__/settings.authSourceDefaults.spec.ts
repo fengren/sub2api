@@ -79,6 +79,32 @@ describe("admin settings auth source defaults helpers", () => {
     expect(state.wechat.grant_on_signup).toBe(false);
   });
 
+  it("keeps feishu tenant options when appending auth source defaults", () => {
+    const payload: UpdateSettingsRequest = {
+      feishu_connect_tenant_options: [
+        {
+          name: "Org A",
+          tenant_key: "tenant_a",
+          client_id: "cli_a",
+          client_secret: "secret_a",
+          group_id: 3,
+        },
+      ],
+    };
+
+    appendAuthSourceDefaultsToUpdateRequest(payload, buildAuthSourceDefaultsState({}));
+
+    expect(payload.feishu_connect_tenant_options).toEqual([
+      {
+        name: "Org A",
+        tenant_key: "tenant_a",
+        client_id: "cli_a",
+        client_secret: "secret_a",
+        group_id: 3,
+      },
+    ]);
+  });
+
   it("reads nested platform_quotas from settings into auth source state", () => {
     const state = buildAuthSourceDefaultsState({
       auth_source_default_email_platform_quotas: {

@@ -107,6 +107,42 @@ describe('API Client', () => {
       const config = adapter.mock.calls[0][0]
       expect(config.withCredentials).toBe(true)
     })
+
+    it('OAuth 浏览器流程请求不附加旧 Authorization 头', async () => {
+      localStorage.setItem('auth_token', 'stale-jwt-token')
+
+      const adapter = vi.fn().mockResolvedValue({
+        status: 200,
+        data: { code: 0, data: {} },
+        headers: {},
+        config: {},
+        statusText: 'OK',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await apiClient.post('/auth/oauth/pending/exchange')
+
+      const config = adapter.mock.calls[0][0]
+      expect(config.headers.get('Authorization')).toBeFalsy()
+    })
+
+    it('OAuth bind-token 仍附加 Authorization 头', async () => {
+      localStorage.setItem('auth_token', 'my-jwt-token')
+
+      const adapter = vi.fn().mockResolvedValue({
+        status: 200,
+        data: { code: 0, data: {} },
+        headers: {},
+        config: {},
+        statusText: 'OK',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await apiClient.post('/auth/oauth/bind-token')
+
+      const config = adapter.mock.calls[0][0]
+      expect(config.headers.get('Authorization')).toBe('Bearer my-jwt-token')
+    })
   })
 
   // --- 响应拦截器 ---
@@ -177,6 +213,47 @@ describe('API Client', () => {
       expect(localStorage.getItem('auth_token')).toBeNull()
 
       // 恢复 location
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+      })
+    })
+
+    it('OAuth 浏览器流程 401 不清除本地登录态也不跳转', async () => {
+      localStorage.setItem('auth_token', 'stale-token')
+      localStorage.setItem('refresh_token', 'refresh-token')
+
+      const originalLocation = window.location
+      Object.defineProperty(window, 'location', {
+        value: { ...originalLocation, pathname: '/auth/feishu/callback', href: '/auth/feishu/callback' },
+        writable: true,
+      })
+
+      const adapter = vi.fn().mockRejectedValue({
+        response: {
+          status: 401,
+          data: { code: 'PENDING_AUTH_BROWSER_MISMATCH', message: 'Browser session mismatch' },
+        },
+        config: {
+          url: '/auth/oauth/pending/exchange',
+          headers: {},
+        },
+        code: 'ERR_BAD_REQUEST',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await expect(apiClient.post('/auth/oauth/pending/exchange')).rejects.toEqual(
+        expect.objectContaining({
+          status: 401,
+          code: 'PENDING_AUTH_BROWSER_MISMATCH',
+          message: 'Browser session mismatch',
+        })
+      )
+
+      expect(localStorage.getItem('auth_token')).toBe('stale-token')
+      expect(localStorage.getItem('refresh_token')).toBe('refresh-token')
+      expect(window.location.href).toBe('/auth/feishu/callback')
+
       Object.defineProperty(window, 'location', {
         value: originalLocation,
         writable: true,

@@ -28,12 +28,25 @@ const (
 	AirwallexDemoStaticDomain = "https://static-demo.airwallex.com"
 	// AirwallexDemoCheckoutDomain 是 Airwallex 沙箱环境收银台元素和 iframe 域名。
 	AirwallexDemoCheckoutDomain = "https://checkout-demo.airwallex.com"
+	// FeishuPassportDomain 是飞书扫码登录 iframe 域名。
+	FeishuPassportDomain = "https://passport.feishu.cn"
+	// FeishuAccountsDomain 是飞书 OAuth 授权跳转域名。
+	FeishuAccountsDomain = "https://accounts.feishu.cn"
+	// LarkPassportDomain 是 Lark（国际版飞书）扫码登录 iframe 域名。
+	LarkPassportDomain = "https://passport.larksuite.com"
+	// LarkAccountsDomain 是 Lark OAuth 授权跳转域名。
+	LarkAccountsDomain = "https://accounts.larksuite.com"
+	// FeishuQRSDKDomain 是飞书扫码登录 Web SDK 脚本域名。
+	FeishuQRSDKDomain = "https://lf-package-cn.feishucdn.com"
+	// LarkQRSDKDomain 是 Lark 扫码登录 Web SDK 脚本域名。
+	LarkQRSDKDomain = "https://lf-package-va.larksuitecdn.com"
 )
 
 var requiredCSPDirectiveValues = []struct {
 	directive string
 	value     string
 }{
+	{"frame-src", "'self'"},
 	{"script-src", CloudflareInsightsDomain},
 	{"script-src", StripeDomain},
 	{"frame-src", StripeDomain},
@@ -47,6 +60,12 @@ var requiredCSPDirectiveValues = []struct {
 	{"style-src", AirwallexDemoStaticDomain},
 	{"style-src", AirwallexDemoCheckoutDomain},
 	{"frame-src", AirwallexDemoCheckoutDomain},
+	{"frame-src", FeishuPassportDomain},
+	{"frame-src", FeishuAccountsDomain},
+	{"frame-src", LarkPassportDomain},
+	{"frame-src", LarkAccountsDomain},
+	{"script-src", FeishuQRSDKDomain},
+	{"script-src", LarkQRSDKDomain},
 }
 
 // GenerateNonce generates a cryptographically secure random nonce.

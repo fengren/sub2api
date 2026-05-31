@@ -16,6 +16,15 @@ export interface DefaultSubscriptionSetting {
   validity_days: number;
 }
 
+export interface FeishuTenantOption {
+  name: string;
+  tenant_key: string;
+  client_id?: string;
+  client_secret?: string;
+  client_secret_configured?: boolean;
+  group_id?: number;
+}
+
 // ── 平台限额类型 ──────────────────────────────────────────────────
 export type PlatformType = "anthropic" | "openai" | "gemini" | "antigravity"
 export type QuotaWindowType = "daily" | "weekly" | "monthly"
@@ -64,7 +73,8 @@ export type AuthSourceType =
   | "wechat"
   | "github"
   | "google"
-  | "dingtalk";
+  | "dingtalk"
+  | "feishu";
 
 export interface AuthSourceDefaultsValue {
   balance: number;
@@ -109,6 +119,7 @@ const AUTH_SOURCE_TYPES: AuthSourceType[] = [
   "github",
   "google",
   "dingtalk",
+  "feishu",
 ];
 const AUTH_SOURCE_DEFAULT_BALANCE = 0;
 const AUTH_SOURCE_DEFAULT_CONCURRENCY = 5;
@@ -243,13 +254,20 @@ export function buildAuthSourceDefaultsState(
 }
 
 export function appendAuthSourceDefaultsToUpdateRequest(
-  payload: UpdateSettingsRequest,
-  authSourceDefaults: AuthSourceDefaultsState,
+	payload: UpdateSettingsRequest,
+	authSourceDefaults: Partial<AuthSourceDefaultsState>,
 ): UpdateSettingsRequest {
-  const target = payload as Record<string, unknown>;
+	const target = payload as Record<string, unknown>;
 
-  for (const source of AUTH_SOURCE_TYPES) {
-    const current = authSourceDefaults[source];
+	for (const source of AUTH_SOURCE_TYPES) {
+		const current = authSourceDefaults[source] ?? {
+			balance: AUTH_SOURCE_DEFAULT_BALANCE,
+			concurrency: AUTH_SOURCE_DEFAULT_CONCURRENCY,
+			subscriptions: [],
+			grant_on_signup: false,
+			grant_on_first_bind: false,
+			platform_quotas: {},
+		};
     target[`auth_source_default_${source}_balance`] =
       Number(current.balance) || 0;
     target[`auth_source_default_${source}_concurrency`] = Math.max(
@@ -404,6 +422,11 @@ export interface SystemSettings {
   auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
   auth_source_default_dingtalk_grant_on_signup?: boolean;
   auth_source_default_dingtalk_grant_on_first_bind?: boolean;
+  auth_source_default_feishu_balance?: number;
+  auth_source_default_feishu_concurrency?: number;
+  auth_source_default_feishu_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_feishu_grant_on_signup?: boolean;
+  auth_source_default_feishu_grant_on_first_bind?: boolean;
   auth_source_default_github_balance?: number;
   auth_source_default_github_concurrency?: number;
   auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
@@ -424,6 +447,7 @@ export interface SystemSettings {
   auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
+  auth_source_default_feishu_platform_quotas?: DefaultPlatformQuotasMap;
   // OEM settings
   site_name: string;
   site_logo: string;
@@ -475,6 +499,18 @@ export interface SystemSettings {
   dingtalk_connect_sync_corp_email_attr_name: string;
   dingtalk_connect_sync_display_name_attr_name: string;
   dingtalk_connect_sync_dept_attr_name: string;
+
+  // Feishu Connect OAuth settings
+  feishu_connect_enabled: boolean;
+  feishu_connect_redirect_url: string;
+  feishu_connect_tenant_options: FeishuTenantOption[];
+  feishu_connect_bypass_registration: boolean;
+  feishu_connect_sync_corp_email: boolean;
+  feishu_connect_sync_display_name: boolean;
+  feishu_connect_sync_corp_email_attr_key: string;
+  feishu_connect_sync_display_name_attr_key: string;
+  feishu_connect_sync_corp_email_attr_name: string;
+  feishu_connect_sync_display_name_attr_name: string;
 
   // WeChat Connect OAuth settings
   wechat_connect_enabled: boolean;
@@ -660,6 +696,11 @@ export interface UpdateSettingsRequest {
   auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
   auth_source_default_dingtalk_grant_on_signup?: boolean;
   auth_source_default_dingtalk_grant_on_first_bind?: boolean;
+  auth_source_default_feishu_balance?: number;
+  auth_source_default_feishu_concurrency?: number;
+  auth_source_default_feishu_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_feishu_grant_on_signup?: boolean;
+  auth_source_default_feishu_grant_on_first_bind?: boolean;
   auth_source_default_github_balance?: number;
   auth_source_default_github_concurrency?: number;
   auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
@@ -680,6 +721,7 @@ export interface UpdateSettingsRequest {
   auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
+  auth_source_default_feishu_platform_quotas?: DefaultPlatformQuotasMap;
   site_name?: string;
   site_logo?: string;
   site_subtitle?: string;
@@ -724,6 +766,16 @@ export interface UpdateSettingsRequest {
   dingtalk_connect_sync_corp_email_attr_name?: string;
   dingtalk_connect_sync_display_name_attr_name?: string;
   dingtalk_connect_sync_dept_attr_name?: string;
+  feishu_connect_enabled?: boolean;
+  feishu_connect_redirect_url?: string;
+  feishu_connect_tenant_options?: FeishuTenantOption[];
+  feishu_connect_bypass_registration?: boolean;
+  feishu_connect_sync_corp_email?: boolean;
+  feishu_connect_sync_display_name?: boolean;
+  feishu_connect_sync_corp_email_attr_key?: string;
+  feishu_connect_sync_display_name_attr_key?: string;
+  feishu_connect_sync_corp_email_attr_name?: string;
+  feishu_connect_sync_display_name_attr_name?: string;
   wechat_connect_enabled?: boolean;
   wechat_connect_app_id?: string;
   wechat_connect_app_secret?: string;

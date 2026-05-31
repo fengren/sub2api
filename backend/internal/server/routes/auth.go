@@ -20,6 +20,9 @@ func RegisterAuthRoutes(
 	redisClient *redis.Client,
 	settingService *service.SettingService,
 ) {
+	// 初始化飞书扫码状态存储
+	handler.InitFeishuQRStore(redisClient)
+
 	// 创建速率限制器
 	rateLimiter := middleware.NewRateLimiter(redisClient)
 
@@ -207,6 +210,36 @@ func RegisterAuthRoutes(
 				FailureMode: middleware.RateLimitFailClose,
 			}),
 			h.Auth.CreateDingTalkOAuthAccount,
+		)
+		auth.GET("/oauth/feishu/qr/init", h.Auth.FeishuOAuthQRInit)
+		auth.GET("/oauth/feishu/qr/page", h.Auth.FeishuOAuthQRPage)
+		auth.POST("/oauth/feishu/qr/verify", h.Auth.FeishuOAuthQRVerify)
+		auth.GET("/oauth/feishu/qr/verify", h.Auth.FeishuOAuthQRVerify)
+		auth.GET("/oauth/feishu/start", h.Auth.FeishuOAuthStart)
+		auth.GET("/oauth/feishu/bind/start", func(c *gin.Context) {
+			query := c.Request.URL.Query()
+			query.Set("intent", "bind_current_user")
+			c.Request.URL.RawQuery = query.Encode()
+			h.Auth.FeishuOAuthStart(c)
+		})
+		auth.GET("/oauth/feishu/callback", h.Auth.FeishuOAuthCallback)
+		auth.POST("/oauth/feishu/complete-registration",
+			rateLimiter.LimitWithOptions("oauth-feishu-complete", 10, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+			h.Auth.CompleteFeishuOAuthRegistration,
+		)
+		auth.POST("/oauth/feishu/bind-login",
+			rateLimiter.LimitWithOptions("oauth-feishu-bind-login", 20, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+			h.Auth.BindFeishuOAuthLogin,
+		)
+		auth.POST("/oauth/feishu/create-account",
+			rateLimiter.LimitWithOptions("oauth-feishu-create-account", 10, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+			h.Auth.CreateFeishuOAuthAccount,
 		)
 	}
 

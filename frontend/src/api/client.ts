@@ -53,11 +53,15 @@ const getUserTimezone = (): string => {
   }
 }
 
+const isOAuthBrowserFlowEndpoint = (url: string): boolean =>
+  url.includes('/auth/oauth/') && !url.includes('/auth/oauth/bind-token')
+
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // Attach token from localStorage
     const token = localStorage.getItem('auth_token')
-    if (token && config.headers) {
+    const url = String(config.url || '')
+    if (token && config.headers && !isOAuthBrowserFlowEndpoint(url)) {
       config.headers.Authorization = `Bearer ${token}`
     }
 
@@ -153,7 +157,10 @@ apiClient.interceptors.response.use(
       if (status === 401 && !originalRequest._retry) {
         const refreshToken = localStorage.getItem('refresh_token')
         const isAuthEndpoint =
-          url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')
+          url.includes('/auth/login') ||
+          url.includes('/auth/register') ||
+          url.includes('/auth/refresh') ||
+          isOAuthBrowserFlowEndpoint(url)
 
         // If we have a refresh token and this is not an auth endpoint, try to refresh
         if (refreshToken && !isAuthEndpoint) {
@@ -243,7 +250,18 @@ apiClient.interceptors.response.use(
           }
         }
 
-        // No refresh token or is auth endpoint - clear auth and redirect
+        if (isAuthEndpoint) {
+          return Promise.reject({
+            status,
+            code: apiData.code,
+            reason: apiData.reason,
+            error: apiData.error,
+            message: apiData.message || apiData.detail || error.message,
+            metadata: apiData.metadata,
+          })
+        }
+
+        // No refresh token on a protected endpoint - clear auth and redirect
         const hasToken = !!localStorage.getItem('auth_token')
         const headers = error.config?.headers as Record<string, unknown> | undefined
         const authHeader = headers?.Authorization ?? headers?.authorization

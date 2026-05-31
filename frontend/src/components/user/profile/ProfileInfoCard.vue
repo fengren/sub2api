@@ -140,6 +140,7 @@
             :user="user"
             :linuxdo-enabled="linuxdoEnabled"
             :dingtalk-enabled="dingtalkEnabled"
+            :feishu-enabled="feishuEnabled"
             :oidc-enabled="oidcEnabled"
             :oidc-provider-name="oidcProviderName"
             :wechat-enabled="wechatEnabled"
@@ -192,6 +193,7 @@ const props = withDefaults(defineProps<{
   user: User | null
   linuxdoEnabled?: boolean
   dingtalkEnabled?: boolean
+  feishuEnabled?: boolean
   oidcEnabled?: boolean
   oidcProviderName?: string
   wechatEnabled?: boolean
@@ -200,6 +202,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   linuxdoEnabled: false,
   dingtalkEnabled: false,
+  feishuEnabled: false,
   oidcEnabled: false,
   oidcProviderName: 'OIDC',
   wechatEnabled: false,
@@ -266,6 +269,7 @@ const providerLabels = computed<Record<UserAuthProvider, string>>(() => ({
   email: t('profile.authBindings.providers.email'),
   linuxdo: t('profile.authBindings.providers.linuxdo'),
   dingtalk: t('profile.authBindings.providers.dingtalk'),
+  feishu: t('profile.authBindings.providers.feishu'),
   oidc: t('profile.authBindings.providers.oidc', { providerName: props.oidcProviderName }),
   wechat: t('profile.authBindings.providers.wechat'),
   github: 'GitHub',
@@ -282,6 +286,8 @@ function normalizeProvider(value: string): UserAuthProvider | null {
     normalized === 'email' ||
     normalized === 'linuxdo' ||
     normalized === 'wechat' ||
+    normalized === 'dingtalk' ||
+    normalized === 'feishu' ||
     normalized === 'github' ||
     normalized === 'google'
   ) {

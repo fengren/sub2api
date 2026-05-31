@@ -76,6 +76,17 @@ type SystemSettings struct {
 	DingTalkConnectSyncDisplayNameAttrName string `json:"dingtalk_connect_sync_display_name_attr_name"`
 	DingTalkConnectSyncDeptAttrName        string `json:"dingtalk_connect_sync_dept_attr_name"`
 
+	FeishuConnectEnabled                 bool                              `json:"feishu_connect_enabled"`
+	FeishuConnectRedirectURL             string                            `json:"feishu_connect_redirect_url"`
+	FeishuConnectTenantOptions           []service.FeishuOAuthTenantOption `json:"feishu_connect_tenant_options"`
+	FeishuConnectBypassRegistration      bool                              `json:"feishu_connect_bypass_registration"`
+	FeishuConnectSyncCorpEmail           bool                              `json:"feishu_connect_sync_corp_email"`
+	FeishuConnectSyncDisplayName         bool                              `json:"feishu_connect_sync_display_name"`
+	FeishuConnectSyncCorpEmailAttrKey    string                            `json:"feishu_connect_sync_corp_email_attr_key"`
+	FeishuConnectSyncDisplayNameAttrKey  string                            `json:"feishu_connect_sync_display_name_attr_key"`
+	FeishuConnectSyncCorpEmailAttrName   string                            `json:"feishu_connect_sync_corp_email_attr_name"`
+	FeishuConnectSyncDisplayNameAttrName string                            `json:"feishu_connect_sync_display_name_attr_name"`
+
 	WeChatConnectEnabled                   bool   `json:"wechat_connect_enabled"`
 	WeChatConnectAppID                     string `json:"wechat_connect_app_id"`
 	WeChatConnectAppSecretConfigured       bool   `json:"wechat_connect_app_secret_configured"`
@@ -260,53 +271,55 @@ type DefaultSubscriptionSetting struct {
 }
 
 type PublicSettings struct {
-	RegistrationEnabled              bool                     `json:"registration_enabled"`
-	EmailVerifyEnabled               bool                     `json:"email_verify_enabled"`
-	ForceEmailOnThirdPartySignup     bool                     `json:"force_email_on_third_party_signup"`
-	RegistrationEmailSuffixWhitelist []string                 `json:"registration_email_suffix_whitelist"`
-	PromoCodeEnabled                 bool                     `json:"promo_code_enabled"`
-	PasswordResetEnabled             bool                     `json:"password_reset_enabled"`
-	InvitationCodeEnabled            bool                     `json:"invitation_code_enabled"`
-	TotpEnabled                      bool                     `json:"totp_enabled"` // TOTP 双因素认证
-	LoginAgreementEnabled            bool                     `json:"login_agreement_enabled"`
-	LoginAgreementMode               string                   `json:"login_agreement_mode"`
-	LoginAgreementUpdatedAt          string                   `json:"login_agreement_updated_at"`
-	LoginAgreementRevision           string                   `json:"login_agreement_revision"`
-	LoginAgreementDocuments          []LoginAgreementDocument `json:"login_agreement_documents"`
-	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
-	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
-	SiteName                         string                   `json:"site_name"`
-	SiteLogo                         string                   `json:"site_logo"`
-	SiteSubtitle                     string                   `json:"site_subtitle"`
-	APIBaseURL                       string                   `json:"api_base_url"`
-	ContactInfo                      string                   `json:"contact_info"`
-	DocURL                           string                   `json:"doc_url"`
-	HomeContent                      string                   `json:"home_content"`
-	HideCcsImportButton              bool                     `json:"hide_ccs_import_button"`
-	PurchaseSubscriptionEnabled      bool                     `json:"purchase_subscription_enabled"`
-	PurchaseSubscriptionURL          string                   `json:"purchase_subscription_url"`
-	TableDefaultPageSize             int                      `json:"table_default_page_size"`
-	TablePageSizeOptions             []int                    `json:"table_page_size_options"`
-	CustomMenuItems                  []CustomMenuItem         `json:"custom_menu_items"`
-	CustomEndpoints                  []CustomEndpoint         `json:"custom_endpoints"`
-	DingTalkOAuthEnabled             bool                     `json:"dingtalk_oauth_enabled"`
-	LinuxDoOAuthEnabled              bool                     `json:"linuxdo_oauth_enabled"`
-	WeChatOAuthEnabled               bool                     `json:"wechat_oauth_enabled"`
-	WeChatOAuthOpenEnabled           bool                     `json:"wechat_oauth_open_enabled"`
-	WeChatOAuthMPEnabled             bool                     `json:"wechat_oauth_mp_enabled"`
-	WeChatOAuthMobileEnabled         bool                     `json:"wechat_oauth_mobile_enabled"`
-	OIDCOAuthEnabled                 bool                     `json:"oidc_oauth_enabled"`
-	OIDCOAuthProviderName            string                   `json:"oidc_oauth_provider_name"`
-	GitHubOAuthEnabled               bool                     `json:"github_oauth_enabled"`
-	GoogleOAuthEnabled               bool                     `json:"google_oauth_enabled"`
-	SoraClientEnabled                bool                     `json:"sora_client_enabled"`
-	BackendModeEnabled               bool                     `json:"backend_mode_enabled"`
-	PaymentEnabled                   bool                     `json:"payment_enabled"`
-	Version                          string                   `json:"version"`
-	BalanceLowNotifyEnabled          bool                     `json:"balance_low_notify_enabled"`
-	AccountQuotaNotifyEnabled        bool                     `json:"account_quota_notify_enabled"`
-	BalanceLowNotifyThreshold        float64                  `json:"balance_low_notify_threshold"`
-	BalanceLowNotifyRechargeURL      string                   `json:"balance_low_notify_recharge_url"`
+	RegistrationEnabled              bool                              `json:"registration_enabled"`
+	EmailVerifyEnabled               bool                              `json:"email_verify_enabled"`
+	ForceEmailOnThirdPartySignup     bool                              `json:"force_email_on_third_party_signup"`
+	RegistrationEmailSuffixWhitelist []string                          `json:"registration_email_suffix_whitelist"`
+	PromoCodeEnabled                 bool                              `json:"promo_code_enabled"`
+	PasswordResetEnabled             bool                              `json:"password_reset_enabled"`
+	InvitationCodeEnabled            bool                              `json:"invitation_code_enabled"`
+	TotpEnabled                      bool                              `json:"totp_enabled"` // TOTP 双因素认证
+	LoginAgreementEnabled            bool                              `json:"login_agreement_enabled"`
+	LoginAgreementMode               string                            `json:"login_agreement_mode"`
+	LoginAgreementUpdatedAt          string                            `json:"login_agreement_updated_at"`
+	LoginAgreementRevision           string                            `json:"login_agreement_revision"`
+	LoginAgreementDocuments          []LoginAgreementDocument          `json:"login_agreement_documents"`
+	TurnstileEnabled                 bool                              `json:"turnstile_enabled"`
+	TurnstileSiteKey                 string                            `json:"turnstile_site_key"`
+	SiteName                         string                            `json:"site_name"`
+	SiteLogo                         string                            `json:"site_logo"`
+	SiteSubtitle                     string                            `json:"site_subtitle"`
+	APIBaseURL                       string                            `json:"api_base_url"`
+	ContactInfo                      string                            `json:"contact_info"`
+	DocURL                           string                            `json:"doc_url"`
+	HomeContent                      string                            `json:"home_content"`
+	HideCcsImportButton              bool                              `json:"hide_ccs_import_button"`
+	PurchaseSubscriptionEnabled      bool                              `json:"purchase_subscription_enabled"`
+	PurchaseSubscriptionURL          string                            `json:"purchase_subscription_url"`
+	TableDefaultPageSize             int                               `json:"table_default_page_size"`
+	TablePageSizeOptions             []int                             `json:"table_page_size_options"`
+	CustomMenuItems                  []CustomMenuItem                  `json:"custom_menu_items"`
+	CustomEndpoints                  []CustomEndpoint                  `json:"custom_endpoints"`
+	DingTalkOAuthEnabled             bool                              `json:"dingtalk_oauth_enabled"`
+	FeishuOAuthEnabled               bool                              `json:"feishu_oauth_enabled"`
+	FeishuOAuthTenants               []service.FeishuOAuthTenantOption `json:"feishu_oauth_tenants"`
+	LinuxDoOAuthEnabled              bool                              `json:"linuxdo_oauth_enabled"`
+	WeChatOAuthEnabled               bool                              `json:"wechat_oauth_enabled"`
+	WeChatOAuthOpenEnabled           bool                              `json:"wechat_oauth_open_enabled"`
+	WeChatOAuthMPEnabled             bool                              `json:"wechat_oauth_mp_enabled"`
+	WeChatOAuthMobileEnabled         bool                              `json:"wechat_oauth_mobile_enabled"`
+	OIDCOAuthEnabled                 bool                              `json:"oidc_oauth_enabled"`
+	OIDCOAuthProviderName            string                            `json:"oidc_oauth_provider_name"`
+	GitHubOAuthEnabled               bool                              `json:"github_oauth_enabled"`
+	GoogleOAuthEnabled               bool                              `json:"google_oauth_enabled"`
+	SoraClientEnabled                bool                              `json:"sora_client_enabled"`
+	BackendModeEnabled               bool                              `json:"backend_mode_enabled"`
+	PaymentEnabled                   bool                              `json:"payment_enabled"`
+	Version                          string                            `json:"version"`
+	BalanceLowNotifyEnabled          bool                              `json:"balance_low_notify_enabled"`
+	AccountQuotaNotifyEnabled        bool                              `json:"account_quota_notify_enabled"`
+	BalanceLowNotifyThreshold        float64                           `json:"balance_low_notify_threshold"`
+	BalanceLowNotifyRechargeURL      string                            `json:"balance_low_notify_recharge_url"`
 
 	ChannelMonitorEnabled                bool `json:"channel_monitor_enabled"`
 	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`

@@ -1252,7 +1252,7 @@ func (s *adminServiceImpl) BindUserAuthIdentity(ctx context.Context, userID int6
 	providerKey := strings.TrimSpace(input.ProviderKey)
 	providerSubject := strings.TrimSpace(input.ProviderSubject)
 	if providerType == "" {
-		return nil, infraerrors.BadRequest("INVALID_INPUT", "provider_type must be one of email, linuxdo, oidc, wechat, or dingtalk")
+		return nil, infraerrors.BadRequest("INVALID_INPUT", "provider_type must be one of email, linuxdo, oidc, wechat, dingtalk, or feishu")
 	}
 	if providerKey == "" || providerSubject == "" {
 		return nil, infraerrors.BadRequest("INVALID_INPUT", "provider_type, provider_key, and provider_subject are required")
@@ -1509,6 +1509,8 @@ func normalizeAdminAuthIdentityProviderType(input string) string {
 		return "wechat"
 	case "dingtalk":
 		return "dingtalk"
+	case "feishu":
+		return "feishu"
 	default:
 		return ""
 	}

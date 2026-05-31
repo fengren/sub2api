@@ -34,7 +34,7 @@ export interface NotifyEmailEntry {
 
 // ==================== User & Auth Types ====================
 
-export type UserAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google' | 'dingtalk'
+export type UserAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google' | 'dingtalk' | 'feishu'
 
 export interface UserAuthBindingStatus {
   bound?: boolean
@@ -216,6 +216,8 @@ export interface PublicSettings {
   custom_endpoints: CustomEndpoint[]
   linuxdo_oauth_enabled: boolean
   dingtalk_oauth_enabled?: boolean
+  feishu_oauth_enabled?: boolean
+  feishu_oauth_tenants?: FeishuOAuthTenantOption[]
   wechat_oauth_enabled: boolean
   wechat_oauth_open_enabled?: boolean
   wechat_oauth_mp_enabled?: boolean
@@ -233,6 +235,13 @@ export interface PublicSettings {
   channel_monitor_default_interval_seconds: number
   available_channels_enabled: boolean
   affiliate_enabled: boolean
+}
+
+export interface FeishuOAuthTenantOption {
+  name: string
+  tenant_key: string
+  client_id?: string
+  group_id?: number
 }
 
 export interface AuthResponse {
