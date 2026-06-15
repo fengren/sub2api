@@ -167,6 +167,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		FeishuConnectRedirectURL:               settings.FeishuConnectRedirectURL,
 		FeishuConnectTenantOptions:             feishuTenantOptionsForResponse(settings.FeishuConnectTenantOptions),
 		FeishuConnectBypassRegistration:        settings.FeishuConnectBypassRegistration,
+		FeishuConnectCorpRestrictionPolicy:     settings.FeishuConnectCorpRestrictionPolicy,
 		FeishuConnectSyncCorpEmail:             settings.FeishuConnectSyncCorpEmail,
 		FeishuConnectSyncDisplayName:           settings.FeishuConnectSyncDisplayName,
 		FeishuConnectSyncCorpEmailAttrKey:      settings.FeishuConnectSyncCorpEmailAttrKey,
@@ -453,6 +454,7 @@ type UpdateSettingsRequest struct {
 	FeishuConnectRedirectURL             string                            `json:"feishu_connect_redirect_url"`
 	FeishuConnectTenantOptions           []service.FeishuOAuthTenantOption `json:"feishu_connect_tenant_options"`
 	FeishuConnectBypassRegistration      bool                              `json:"feishu_connect_bypass_registration"`
+	FeishuConnectCorpRestrictionPolicy   string                            `json:"feishu_connect_corp_restriction_policy"`
 	FeishuConnectSyncCorpEmail           bool                              `json:"feishu_connect_sync_corp_email"`
 	FeishuConnectSyncDisplayName         bool                              `json:"feishu_connect_sync_display_name"`
 	FeishuConnectSyncCorpEmailAttrKey    string                            `json:"feishu_connect_sync_corp_email_attr_key"`
@@ -1039,6 +1041,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		if req.FeishuConnectSyncDisplayNameAttrName == "" {
 			req.FeishuConnectSyncDisplayNameAttrName = "飞书姓名"
 		}
+		req.FeishuConnectCorpRestrictionPolicy = strings.ToLower(strings.TrimSpace(req.FeishuConnectCorpRestrictionPolicy))
+		if req.FeishuConnectCorpRestrictionPolicy == "" {
+			if v := strings.TrimSpace(previousSettings.FeishuConnectCorpRestrictionPolicy); v != "" {
+				req.FeishuConnectCorpRestrictionPolicy = v
+			} else {
+				req.FeishuConnectCorpRestrictionPolicy = "none"
+			}
+		}
+		if req.FeishuConnectCorpRestrictionPolicy != "none" && req.FeishuConnectCorpRestrictionPolicy != "internal_only" {
+			response.BadRequest(c, "feishu_connect.corp_restriction_policy must be 'none' or 'internal_only'")
+			return
+		}
 	}
 
 	if req.WeChatConnectEnabled {
@@ -1600,6 +1614,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		FeishuConnectRedirectURL:               req.FeishuConnectRedirectURL,
 		FeishuConnectTenantOptions:             req.FeishuConnectTenantOptions,
 		FeishuConnectBypassRegistration:        req.FeishuConnectBypassRegistration,
+		FeishuConnectCorpRestrictionPolicy:     req.FeishuConnectCorpRestrictionPolicy,
 		FeishuConnectSyncCorpEmail:             req.FeishuConnectSyncCorpEmail,
 		FeishuConnectSyncDisplayName:           req.FeishuConnectSyncDisplayName,
 		FeishuConnectSyncCorpEmailAttrKey:      req.FeishuConnectSyncCorpEmailAttrKey,
@@ -2062,6 +2077,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		FeishuConnectRedirectURL:               updatedSettings.FeishuConnectRedirectURL,
 		FeishuConnectTenantOptions:             feishuTenantOptionsForResponse(updatedSettings.FeishuConnectTenantOptions),
 		FeishuConnectBypassRegistration:        updatedSettings.FeishuConnectBypassRegistration,
+		FeishuConnectCorpRestrictionPolicy:     updatedSettings.FeishuConnectCorpRestrictionPolicy,
 		FeishuConnectSyncCorpEmail:             updatedSettings.FeishuConnectSyncCorpEmail,
 		FeishuConnectSyncDisplayName:           updatedSettings.FeishuConnectSyncDisplayName,
 		FeishuConnectSyncCorpEmailAttrKey:      updatedSettings.FeishuConnectSyncCorpEmailAttrKey,

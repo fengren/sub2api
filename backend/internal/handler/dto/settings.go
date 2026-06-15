@@ -80,6 +80,7 @@ type SystemSettings struct {
 	FeishuConnectRedirectURL             string                            `json:"feishu_connect_redirect_url"`
 	FeishuConnectTenantOptions           []service.FeishuOAuthTenantOption `json:"feishu_connect_tenant_options"`
 	FeishuConnectBypassRegistration      bool                              `json:"feishu_connect_bypass_registration"`
+	FeishuConnectCorpRestrictionPolicy   string                            `json:"feishu_connect_corp_restriction_policy"`
 	FeishuConnectSyncCorpEmail           bool                              `json:"feishu_connect_sync_corp_email"`
 	FeishuConnectSyncDisplayName         bool                              `json:"feishu_connect_sync_display_name"`
 	FeishuConnectSyncCorpEmailAttrKey    string                            `json:"feishu_connect_sync_corp_email_attr_key"`

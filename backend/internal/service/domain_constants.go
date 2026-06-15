@@ -193,6 +193,7 @@ const (
 	SettingKeyFeishuConnectRedirectURL             = "feishu_connect_redirect_url"
 	SettingKeyFeishuConnectTenantOptions           = "feishu_connect_tenant_options"
 	SettingKeyFeishuConnectBypassRegistration      = "feishu_connect_bypass_registration"
+	SettingKeyFeishuConnectCorpRestrictionPolicy   = "feishu_connect_corp_restriction_policy"
 	SettingKeyFeishuConnectSyncDisplayName         = "feishu_connect_sync_display_name"
 	SettingKeyFeishuConnectSyncCorpEmail           = "feishu_connect_sync_corp_email"
 	SettingKeyFeishuConnectSyncDisplayNameAttrKey  = "feishu_connect_sync_display_name_attr_key"

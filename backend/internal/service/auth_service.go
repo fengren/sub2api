@@ -583,7 +583,7 @@ func (s *AuthService) canBypassRegistrationDisabledForOAuth(ctx context.Context,
 		if err != nil || !cfg.Enabled || !cfg.BypassRegistration {
 			return false
 		}
-		return len(cfg.TenantOptions) > 0
+		return cfg.CorpRestrictionPolicy == "internal_only" && len(cfg.TenantOptions) > 0
 	default:
 		return false
 	}

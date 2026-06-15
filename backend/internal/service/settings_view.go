@@ -71,6 +71,7 @@ type SystemSettings struct {
 	FeishuConnectRedirectURL             string
 	FeishuConnectTenantOptions           []FeishuOAuthTenantOption
 	FeishuConnectBypassRegistration      bool
+	FeishuConnectCorpRestrictionPolicy   string
 	FeishuConnectSyncDisplayName         bool
 	FeishuConnectSyncCorpEmail           bool
 	FeishuConnectSyncDisplayNameAttrKey  string

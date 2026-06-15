@@ -3,6 +3,8 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -23,6 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	//nolint:depguard // FeishuQRStore is initialized from routes with the shared Redis client; keep this narrow until the store moves out of handler.
 	"github.com/redis/go-redis/v9"
 )
 
@@ -76,20 +79,11 @@ const (
 	feishuQRStatusCancelled = "cancelled"
 )
 
+var errFeishuQRStoreUnavailable = infraerrors.ServiceUnavailable("QR_STORE_UNAVAILABLE", "feishu qr session store is not available")
+
 type feishuOAuthClient struct {
 	cfg        config.FeishuConnectConfig
 	httpClient *http.Client
-}
-
-// feishuOpenAPIBase 返回飞书开放平台 base URL（从 AppAccessTokenURL 推导）
-func (c *feishuOAuthClient) feishuOpenAPIBase() string {
-	if u, err := url.Parse(c.cfg.AppAccessTokenURL); err == nil {
-		return u.Scheme + "://" + u.Host
-	}
-	if c.cfg.Region == "int" {
-		return "https://open.larksuite.com"
-	}
-	return "https://open.feishu.cn"
 }
 
 type feishuOAuthProfile struct {
@@ -109,13 +103,6 @@ type feishuOAuthPreparedSession struct {
 	intent            string
 	browserSessionKey string
 	selectedTenantKey string
-}
-
-type feishuOAuthQRProvider struct {
-	ProviderKey string `json:"provider_key"`
-	DisplayName string `json:"display_name"`
-	ClientID    string `json:"client_id"`
-	GotoURL     string `json:"goto_url"`
 }
 
 type feishuOAuthQRInitResponse struct {
@@ -147,7 +134,7 @@ func (s *FeishuQRStore) CreateTicketWithSession(ctx context.Context, ticketID, s
 
 func (s *FeishuQRStore) CreateTicketFull(ctx context.Context, ticketID, state, redirectTo, intent, browserSessionKey, feishuToken, selectedTenantKey, flowKey string) error {
 	if !s.isReady() {
-		return nil
+		return errFeishuQRStoreUnavailable
 	}
 	st := FeishuQRState{
 		TicketID:          ticketID,
@@ -178,7 +165,7 @@ func (s *FeishuQRStore) CreateTicketFull(ctx context.Context, ticketID, state, r
 // GetByFeishuToken 通过飞书 token 查找 QR 状态
 func (s *FeishuQRStore) GetByFeishuToken(ctx context.Context, feishuToken string) (*FeishuQRState, error) {
 	if !s.isReady() {
-		return nil, nil
+		return nil, errFeishuQRStoreUnavailable
 	}
 	ticketID, err := s.client.Get(ctx, feishuQRRedisKeyPrefix+"token:"+feishuToken).Result()
 	if err == redis.Nil {
@@ -192,7 +179,7 @@ func (s *FeishuQRStore) GetByFeishuToken(ctx context.Context, feishuToken string
 
 func (s *FeishuQRStore) GetStatus(ctx context.Context, ticketID string) (*FeishuQRState, error) {
 	if !s.isReady() {
-		return nil, nil
+		return nil, errFeishuQRStoreUnavailable
 	}
 	data, err := s.client.Get(ctx, s.redisKey(ticketID)).Bytes()
 	if err == redis.Nil {
@@ -210,7 +197,7 @@ func (s *FeishuQRStore) GetStatus(ctx context.Context, ticketID string) (*Feishu
 
 func (s *FeishuQRStore) MarkConfirmedWithSession(ctx context.Context, ticketID, code, redirectTo, pendingSessionToken string) error {
 	if !s.isReady() {
-		return nil
+		return errFeishuQRStoreUnavailable
 	}
 	st, err := s.GetStatus(ctx, ticketID)
 	if err != nil || st == nil {
@@ -236,7 +223,7 @@ func (s *FeishuQRStore) MarkConfirmedWithSession(ctx context.Context, ticketID, 
 
 func (s *FeishuQRStore) MarkScanned(ctx context.Context, ticketID string) error {
 	if !s.isReady() {
-		return nil
+		return errFeishuQRStoreUnavailable
 	}
 	st, err := s.GetStatus(ctx, ticketID)
 	if err != nil || st == nil {
@@ -277,6 +264,15 @@ func clearFeishuCookie(c *gin.Context, name string, secure bool) {
 	})
 }
 
+func generateCSPNonce() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// fallback: 不会真正发生，但避免 panic
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}
+
 func (h *AuthHandler) FeishuOAuthStart(c *gin.Context) {
 	prepared, err := h.prepareFeishuOAuthSession(c)
 	if err != nil {
@@ -307,7 +303,8 @@ func (h *AuthHandler) FeishuOAuthQRInit(c *gin.Context) {
 	if err := feishuQRStore.CreateTicketFull(c.Request.Context(), ticketID, ticketID,
 		prepared.redirectTo, prepared.intent, prepared.browserSessionKey,
 		ticketID, prepared.selectedTenantKey, ""); err != nil {
-		slog.Warn("feishu qr store create failed", "error", err.Error())
+		response.ErrorFrom(c, err)
+		return
 	}
 
 	// 飞书 OAuth 授权 URL（passport.feishu.cn 页面自带扫码界面）
@@ -342,14 +339,15 @@ func (h *AuthHandler) FeishuOAuthQRPage(c *gin.Context) {
 
 	sdkURL := feishuQRSDKURL(region)
 	gotoJSON, _ := json.Marshal(gotoURL)
+	nonce := generateCSPNonce()
 
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
 	c.Header("X-Frame-Options", "SAMEORIGIN")
 	c.Header("Content-Security-Policy", strings.Join([]string{
 		"default-src 'none'",
-		"script-src 'unsafe-inline' " + sdkURL,
-		"style-src 'unsafe-inline'",
+		"script-src 'nonce-" + nonce + "' " + sdkURL,
+		"style-src 'nonce-" + nonce + "'",
 		"img-src data: https:",
 		"frame-src https://passport.feishu.cn https://accounts.feishu.cn https://passport.larksuite.com https://accounts.larksuite.com",
 		"connect-src https:",
@@ -357,13 +355,14 @@ func (h *AuthHandler) FeishuOAuthQRPage(c *gin.Context) {
 		"frame-ancestors 'self'",
 	}, "; "))
 
+	nonceAttr := ` nonce="` + nonce + `"`
 	page := fmt.Sprintf(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Feishu QR Login</title>
-  <style>
+  <style%s>
     html, body { margin: 0; width: 100%%; height: 100%%; background: #fff; overflow: hidden; }
     body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     #login_container { width: 300px; height: 360px; display: flex; align-items: center; justify-content: center; }
@@ -372,8 +371,8 @@ func (h *AuthHandler) FeishuOAuthQRPage(c *gin.Context) {
 </head>
 <body>
   <div id="login_container"></div>
-  <script src="%s"></script>
-  <script>
+  <script%s src="%s"></script>
+  <script%s>
     (function () {
       var gotoURL = %s;
       var container = document.getElementById('login_container');
@@ -462,7 +461,7 @@ func (h *AuthHandler) FeishuOAuthQRPage(c *gin.Context) {
     })();
 	</script>
 </body>
-</html>`, html.EscapeString(sdkURL), string(gotoJSON))
+</html>`, nonceAttr, nonceAttr, html.EscapeString(sdkURL), nonceAttr, string(gotoJSON))
 
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(page))
 }
@@ -500,13 +499,7 @@ func (h *AuthHandler) FeishuOAuthQRVerify(c *gin.Context) {
 	// token 有效，标记为 scanned
 	_ = feishuQRStore.MarkScanned(c.Request.Context(), st.TicketID)
 
-	// 返回飞书期望的响应格式
 	cfg, _ := h.getFeishuOAuthConfig(c.Request.Context())
-	frontendCallback := strings.TrimSpace(cfg.FrontendRedirectURL)
-	if frontendCallback == "" {
-		frontendCallback = feishuOAuthDefaultFrontendCB
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"err_no":  0,
 		"err_msg": "",
@@ -868,58 +861,6 @@ func (c *feishuOAuthClient) fetchUserInfo(ctx context.Context, userAccessToken s
 	return profile, nil
 }
 
-// qrPreLogin 调用飞书 passport /accounts/qrlogin/init，获取扫码 token 和 flow_key
-func (c *feishuOAuthClient) qrPreLogin(ctx context.Context) (token, flowKey string, err error) {
-	passportBase := feishuPassportBase(c.cfg.Region)
-	body := map[string]string{"app_id": strings.TrimSpace(c.cfg.ClientID)}
-	reqBody, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, passportBase+"/accounts/qrlogin/init", bytes.NewReader(reqBody))
-	if err != nil {
-		return "", "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-App-Id", strings.TrimSpace(c.cfg.ClientID))
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", infraerrors.InternalServer("FEISHU_QR_INIT_HTTP_ERROR", fmt.Sprintf("feishu qr init http status %d: %s", resp.StatusCode, string(respBody)))
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal(respBody, &decoded); err != nil {
-		return "", "", infraerrors.InternalServer("FEISHU_QR_INIT_DECODE_FAILED", "failed to decode feishu qr init response").WithCause(err)
-	}
-	// flow_key 可能在响应 header 或 body 中
-	flowKey = resp.Header.Get("X-Flow-Key")
-	if flowKey == "" {
-		flowKey = feishuString(decoded, "flow_key", "flowKey")
-	}
-	data, _ := decoded["data"].(map[string]any)
-	if data != nil {
-		token = feishuString(data, "token")
-		if fk := feishuString(data, "flow_key", "flowKey"); fk != "" {
-			flowKey = fk
-		}
-	}
-	if token == "" {
-		token = feishuString(decoded, "token")
-	}
-	if token == "" {
-		return "", "", infraerrors.InternalServer("FEISHU_QR_INIT_TOKEN_MISSING", "feishu qr init token missing from response")
-	}
-	return token, flowKey, nil
-}
-
-func feishuPassportBase(region string) string {
-	if region == "int" {
-		return "https://passport.larksuite.com"
-	}
-	return "https://passport.feishu.cn"
-}
-
 func buildFeishuQRPageURL(region, gotoURL string) string {
 	u := url.URL{Path: "/api/v1/auth/oauth/feishu/qr/page"}
 	q := u.Query()
@@ -951,12 +892,6 @@ func isAllowedFeishuAuthorizeURL(rawURL string) bool {
 	}
 }
 
-func respondFeishuQRCallbackComplete(c *gin.Context) {
-	c.Header("Cache-Control", "no-store")
-	c.Header("Pragma", "no-cache")
-	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<!doctype html><html><head><meta charset="utf-8"><title>Feishu sign-in complete</title></head><body>Feishu sign-in complete.</body></html>`))
-}
-
 func (c *feishuOAuthClient) doJSON(ctx context.Context, method, endpoint, bearer string, payload any) (map[string]any, error) {
 	var body io.Reader
 	if payload != nil {
@@ -980,7 +915,9 @@ func (c *feishuOAuthClient) doJSON(ctx context.Context, method, endpoint, bearer
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, infraerrors.InternalServer("FEISHU_UPSTREAM_HTTP_ERROR", fmt.Sprintf("feishu upstream http status %d", resp.StatusCode))

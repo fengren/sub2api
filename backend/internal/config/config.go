@@ -302,6 +302,11 @@ type FeishuConnectConfig struct {
 
 	BypassRegistration bool `mapstructure:"bypass_registration"`
 
+	// CorpRestrictionPolicy 控制 bypass_registration 的生效条件：
+	//   - "none"（默认）：bypass_registration 不生效
+	//   - "internal_only"：仅当配置了 tenant_options 时 bypass_registration 生效
+	CorpRestrictionPolicy string `mapstructure:"corp_restriction_policy"`
+
 	// 身份同步
 	SyncDisplayName         bool   `mapstructure:"sync_display_name"`
 	SyncCorpEmail           bool   `mapstructure:"sync_corp_email"`
@@ -1512,6 +1517,10 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.Feishu.Scopes = strings.TrimSpace(cfg.Feishu.Scopes)
 	cfg.Feishu.RedirectURL = strings.TrimSpace(cfg.Feishu.RedirectURL)
 	cfg.Feishu.FrontendRedirectURL = strings.TrimSpace(cfg.Feishu.FrontendRedirectURL)
+	cfg.Feishu.CorpRestrictionPolicy = strings.ToLower(strings.TrimSpace(cfg.Feishu.CorpRestrictionPolicy))
+	if cfg.Feishu.CorpRestrictionPolicy == "" {
+		cfg.Feishu.CorpRestrictionPolicy = "none"
+	}
 	normalizedFeishuTenantOptions := make([]FeishuTenantOptionConfig, 0, len(cfg.Feishu.TenantOptions))
 	seenFeishuTenantKeys := map[string]struct{}{}
 	for _, option := range cfg.Feishu.TenantOptions {
@@ -1783,6 +1792,7 @@ func setDefaults() {
 	viper.SetDefault("feishu_connect.scopes", "")
 	viper.SetDefault("feishu_connect.frontend_redirect_url", "/auth/feishu/callback")
 	viper.SetDefault("feishu_connect.require_email", true)
+	viper.SetDefault("feishu_connect.corp_restriction_policy", "none")
 
 	// Database
 	viper.SetDefault("database.host", "localhost")
@@ -2933,6 +2943,10 @@ func (c *Config) Validate() error {
 		}
 		if err := ValidateFeishuConfig(c.Feishu); err != nil {
 			return fmt.Errorf("feishu_connect: %w", err)
+		}
+		policy := strings.TrimSpace(c.Feishu.CorpRestrictionPolicy)
+		if policy != "" && policy != "none" && policy != "internal_only" {
+			return fmt.Errorf("feishu_connect.corp_restriction_policy must be 'none' or 'internal_only', got %q", policy)
 		}
 	}
 	return nil

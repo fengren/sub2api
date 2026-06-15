@@ -1881,6 +1881,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyFeishuConnectRedirectURL] = settings.FeishuConnectRedirectURL
 	updates[SettingKeyFeishuConnectTenantOptions] = encodeFeishuOAuthTenantOptions(settings.FeishuConnectTenantOptions)
 	updates[SettingKeyFeishuConnectBypassRegistration] = strconv.FormatBool(settings.FeishuConnectBypassRegistration)
+	updates[SettingKeyFeishuConnectCorpRestrictionPolicy] = settings.FeishuConnectCorpRestrictionPolicy
 	updates[SettingKeyFeishuConnectSyncDisplayName] = strconv.FormatBool(settings.FeishuConnectSyncDisplayName)
 	updates[SettingKeyFeishuConnectSyncCorpEmail] = strconv.FormatBool(settings.FeishuConnectSyncCorpEmail)
 	updates[SettingKeyFeishuConnectSyncDisplayNameAttrKey] = settings.FeishuConnectSyncDisplayNameAttrKey
@@ -3291,6 +3292,14 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	} else {
 		result.FeishuConnectBypassRegistration = feishuBase.BypassRegistration
 	}
+	if v, ok := settings[SettingKeyFeishuConnectCorpRestrictionPolicy]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectCorpRestrictionPolicy = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectCorpRestrictionPolicy = feishuBase.CorpRestrictionPolicy
+	}
+	if result.FeishuConnectCorpRestrictionPolicy == "" {
+		result.FeishuConnectCorpRestrictionPolicy = "none"
+	}
 
 	if v, ok := settings[SettingKeyFeishuConnectSyncDisplayName]; ok && strings.TrimSpace(v) != "" {
 		result.FeishuConnectSyncDisplayName = strings.EqualFold(strings.TrimSpace(v), "true")
@@ -4220,6 +4229,7 @@ func (s *SettingService) GetFeishuConnectOAuthConfig(ctx context.Context) (confi
 		SettingKeyFeishuConnectRedirectURL,
 		SettingKeyFeishuConnectTenantOptions,
 		SettingKeyFeishuConnectBypassRegistration,
+		SettingKeyFeishuConnectCorpRestrictionPolicy,
 		SettingKeyFeishuConnectSyncDisplayName,
 		SettingKeyFeishuConnectSyncCorpEmail,
 		SettingKeyFeishuConnectSyncDisplayNameAttrKey,
@@ -4243,6 +4253,12 @@ func (s *SettingService) GetFeishuConnectOAuthConfig(ctx context.Context) (confi
 	}
 	if v, ok := settings[SettingKeyFeishuConnectBypassRegistration]; ok && strings.TrimSpace(v) != "" {
 		effective.BypassRegistration = strings.EqualFold(strings.TrimSpace(v), "true")
+	}
+	if v, ok := settings[SettingKeyFeishuConnectCorpRestrictionPolicy]; ok && strings.TrimSpace(v) != "" {
+		effective.CorpRestrictionPolicy = strings.TrimSpace(v)
+	}
+	if effective.CorpRestrictionPolicy == "" {
+		effective.CorpRestrictionPolicy = "none"
 	}
 
 	if v, ok := settings[SettingKeyFeishuConnectSyncDisplayName]; ok && strings.TrimSpace(v) != "" {

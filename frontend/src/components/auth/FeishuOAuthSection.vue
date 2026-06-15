@@ -22,7 +22,7 @@
         </button>
       </div>
 
-      <div class="relative overflow-hidden rounded-md" style="width: 260px; height: 330px;">
+      <div class="relative overflow-hidden rounded-md" style="width: 260px; height: 290px;">
         <div v-if="loading" class="flex h-full items-center justify-center">
           <span class="text-sm text-gray-500 dark:text-dark-400">
             {{ t('auth.feishu.loadingQR') }}
@@ -32,7 +32,7 @@
           v-else-if="qrPageURL"
           :src="qrPageURL"
           class="absolute border-0"
-          style="left: -20px; top: -16px; width: 300px; height: 360px;"
+          style="left: -20px; top: -16px; width: 300px; height: 290px;"
         />
         <div
           v-else-if="status === 'error'"
