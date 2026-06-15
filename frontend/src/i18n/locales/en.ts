@@ -344,6 +344,34 @@ export default {
     }
   },
 
+  adminCompliance: {
+    title: 'Deployment and Operation Compliance Acknowledgment',
+    blockingNotice: 'Deployment and operation compliance acknowledgment is required before continuing to use the console.',
+    riskNotice: 'This acknowledgment provides clear, conspicuous, and reproducible notice of compliance obligations and operation risks for self-hosted instances.',
+    version: 'Document Version',
+    openDocument: 'Open the GitHub document',
+    documentSource: 'The agreement text comes from Markdown files in this project repository. When the agreement content changes, the document version must be incremented; acknowledgments of older versions become invalid and console users must acknowledge again.',
+    inputLabel: 'Type the following confirmation phrase exactly',
+    inputPlaceholder: 'Type the confirmation phrase to continue',
+    inputMismatch: 'The confirmation phrase does not match. Type the displayed text exactly.',
+    legalNote: 'This acknowledgment defines the no-affiliation relationship and responsibility boundary between self-hosted instances and the open-source project, copyright holders, contributors, and maintainers. The party that deploys, operates, or controls the relevant instance remains independently responsible for its applicable obligations.',
+    logout: 'Log out',
+    accept: 'Acknowledge and Continue',
+    accepted: 'Compliance acknowledgment recorded',
+    acceptFailed: 'Failed to submit acknowledgment'
+  },
+
+  legal: {
+    loadFailed: 'Failed to load document',
+    retryLater: 'Refresh the page and try again later.',
+    notFound: 'Document not found',
+    notFoundDescription: 'This legal document does not exist or has been removed by an administrator.',
+    updatedAt: 'Updated: {date}',
+    empty: 'No content',
+    loginAgreement: 'Login Agreement',
+    adminCompliance: 'Deployment and Operation Compliance Commitment'
+  },
+
   // Navigation
   nav: {
     dashboard: 'Dashboard',
@@ -896,6 +924,8 @@ export default {
     accountCost: 'Cost',
     userBilled: 'User billed',
     accountBilled: 'Account billed',
+    resetNow: 'Now',
+    resetPending: 'Pending refresh',
     accountMultiplier: 'Account rate',
     avgDuration: 'Avg Duration',
     inSelectedRange: 'in selected range',
@@ -936,6 +966,9 @@ export default {
     unknown: 'Unknown',
     in: 'In',
     out: 'Out',
+    cacheHit: 'Cache hit',
+    cacheCreate: 'Cache create',
+    cacheHitRate: 'Cache hit rate',
     inputTokenPrice: 'Input price',
     outputTokenPrice: 'Output price',
     perMillionTokens: '/ 1M tokens',
@@ -946,6 +979,9 @@ export default {
     imageBillingSize: 'Billing size',
     imageInputSize: 'Input size',
     imageOutputSize: 'Output size',
+    imageOutputTokens: 'Image Output Tokens',
+    imageOutputTokenPrice: 'Image Output Price',
+    imageOutputCost: 'Image Output Cost',
     imageSizeSource: 'Size source',
     imageSizeBreakdown: 'Size breakdown',
     imageSizeSourceOutput: 'Upstream output',
@@ -1829,6 +1865,16 @@ export default {
       allGroups: 'All Groups',
       searchGroups: 'Search groups...',
       fuzzySearch: 'Fuzzy search',
+      apiKeyGroupFilter: 'API Key Group',
+      apiKeyGroupExclusive: 'Exclusive Groups',
+      apiKeyGroupPublic: 'Public Groups',
+      apiKeyGroupSubscription: 'Subscription Groups',
+      apiKeyGroupDisabled: 'Disabled Groups',
+      authorizedGroupFilter: 'Authorized Group',
+      allAuthorizedGroups: 'All Authorized Groups',
+      searchAuthorizedGroups: 'Search authorized groups...',
+      allApiKeyGroups: 'All API Key Groups',
+      searchApiKeyGroups: 'Search API Key groups...',
       admin: 'Admin',
       user: 'User',
       disabled: 'Disabled',
@@ -3335,6 +3381,11 @@ export default {
       recoverStateHint: 'Used to recover error, rate-limit, and temporary unschedulable runtime state.',
       recoverStateSuccess: 'Account state recovered successfully',
       recoverStateFailed: 'Failed to recover account state',
+      fallbackActive: 'Fallback',
+      fallbackActiveTip: 'Origin proxy {origin} expired',
+      revertProxy: 'Revert proxy',
+      revertProxySuccess: 'Successfully reverted to original proxy',
+      revertProxyFailed: 'Failed to revert proxy',
       resetStatus: 'Reset Status',
       statusReset: 'Account status reset successfully',
       failedToResetStatus: 'Failed to reset account status',
@@ -4211,6 +4262,8 @@ export default {
         status: 'Status',
         accounts: 'Accounts',
         latency: 'Latency',
+        expiry: 'Validity',
+        createdAt: 'Created',
         actions: 'Actions'
       },
       testConnection: 'Test Connection',
@@ -4308,7 +4361,21 @@ export default {
       hostRequired: 'Please enter host address',
       portInvalid: 'Port must be between 1-65535',
       deleteConfirm:
-        "Are you sure you want to delete '{name}'? Accounts using this proxy will have their proxy removed."
+        "Are you sure you want to delete '{name}'? Accounts using this proxy will have their proxy removed.",
+      neverExpires: 'Never',
+      expired: 'Expired',
+      overdueDays: 'Overdue {days}d',
+      expiringInDays: 'Expires in {days}d',
+      remainingDays: '{days}d left',
+      expiresAt: 'Validity',
+      nDays: '{days}d',
+      expiryDaysPlaceholder: 'Custom days, empty = never',
+      expiryWarnDays: 'Expiry warning (days)',
+      fallbackMode: 'Failure fallback',
+      fallbackNone: 'No fallback',
+      fallbackProxy: 'Backup proxy',
+      fallbackDirect: 'Direct connection',
+      backupProxy: 'Backup proxy',
     },
 
     // Redeem Codes
@@ -5063,6 +5130,7 @@ export default {
           accountRateLimitedCount: 'Rate-limited Accounts',
           accountErrorCount: 'Error Accounts (excluding temporarily unschedulable)',
           accountErrorRatio: 'Error Account Ratio (%)',
+          accountTempUnscheduledCount: 'Temporarily Unschedulable Accounts',
           overloadAccountCount: 'Overloaded Accounts'
         },
         metricDescriptions: {
@@ -5080,6 +5148,7 @@ export default {
           accountRateLimitedCount: 'Number of rate-limited accounts within the window.',
           accountErrorCount: 'Number of error accounts within the window (excluding temporarily unschedulable).',
           accountErrorRatio: 'Error account ratio within the window (0-100).',
+          accountTempUnscheduledCount: 'Number of accounts currently temporarily unschedulable (e.g. proxy/credential failure auto-eviction).',
           overloadAccountCount: 'Number of overloaded accounts within the window.'
         },
         hints: {
