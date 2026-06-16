@@ -222,6 +222,7 @@ type AuthSourceDefaultSettings struct {
 	GitHub                       ProviderDefaultGrantSettings
 	Google                       ProviderDefaultGrantSettings
 	DingTalk                     ProviderDefaultGrantSettings
+	Feishu                       ProviderDefaultGrantSettings
 	ForceEmailOnThirdPartySignup bool
 }
 
@@ -300,6 +301,15 @@ var (
 		grantOnSignup:    SettingKeyAuthSourceDefaultDingTalkGrantOnSignup,
 		grantOnFirstBind: SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("dingtalk"),
+	}
+	feishuAuthSourceDefaultKeys = authSourceDefaultKeySet{
+		source:           "feishu",
+		balance:          SettingKeyAuthSourceDefaultFeishuBalance,
+		concurrency:      SettingKeyAuthSourceDefaultFeishuConcurrency,
+		subscriptions:    SettingKeyAuthSourceDefaultFeishuSubscriptions,
+		grantOnSignup:    SettingKeyAuthSourceDefaultFeishuGrantOnSignup,
+		grantOnFirstBind: SettingKeyAuthSourceDefaultFeishuGrantOnFirstBind,
+		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("feishu"),
 	}
 )
 
@@ -452,6 +462,108 @@ func buildLoginAgreementRevision(updatedAt string, docs []LoginAgreementDocument
 	}
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+func hasExplicitFeishuConnectDBConfig(settings map[string]string, enabledValue string) bool {
+	if strings.TrimSpace(enabledValue) == "true" {
+		return true
+	}
+	return strings.TrimSpace(settings[SettingKeyFeishuConnectRedirectURL]) != "" ||
+		strings.TrimSpace(settings[SettingKeyFeishuConnectTenantOptions]) != ""
+}
+
+func normalizeFeishuOAuthTenantOptions(options []FeishuOAuthTenantOption) []FeishuOAuthTenantOption {
+	normalized := make([]FeishuOAuthTenantOption, 0, len(options))
+	seen := make(map[string]struct{}, len(options))
+	for _, option := range options {
+		tenantKey := strings.TrimSpace(option.TenantKey)
+		if tenantKey == "" {
+			continue
+		}
+		if _, ok := seen[tenantKey]; ok {
+			continue
+		}
+		seen[tenantKey] = struct{}{}
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			name = tenantKey
+		}
+		clientID := strings.TrimSpace(option.ClientID)
+		clientSecret := strings.TrimSpace(option.ClientSecret)
+		normalized = append(normalized, FeishuOAuthTenantOption{
+			Name:                   name,
+			TenantKey:              tenantKey,
+			ClientID:               clientID,
+			ClientSecret:           clientSecret,
+			ClientSecretConfigured: option.ClientSecretConfigured || clientSecret != "",
+			GroupID:                option.GroupID,
+		})
+	}
+	return normalized
+}
+
+func feishuOAuthTenantOptionsFromConfig(options []config.FeishuTenantOptionConfig) []FeishuOAuthTenantOption {
+	result := make([]FeishuOAuthTenantOption, 0, len(options))
+	for _, option := range options {
+		result = append(result, FeishuOAuthTenantOption{
+			Name:                   option.Name,
+			TenantKey:              option.TenantKey,
+			ClientID:               option.ClientID,
+			ClientSecret:           option.ClientSecret,
+			ClientSecretConfigured: option.ClientSecret != "",
+			GroupID:                option.GroupID,
+		})
+	}
+	return normalizeFeishuOAuthTenantOptions(result)
+}
+
+func feishuOAuthTenantOptionsToConfig(options []FeishuOAuthTenantOption) []config.FeishuTenantOptionConfig {
+	normalized := normalizeFeishuOAuthTenantOptions(options)
+	result := make([]config.FeishuTenantOptionConfig, 0, len(normalized))
+	for _, option := range normalized {
+		result = append(result, config.FeishuTenantOptionConfig{
+			Name:         option.Name,
+			TenantKey:    option.TenantKey,
+			ClientID:     option.ClientID,
+			ClientSecret: option.ClientSecret,
+			GroupID:      option.GroupID,
+		})
+	}
+	return result
+}
+
+func publicFeishuOAuthTenantOptions(options []FeishuOAuthTenantOption) []FeishuOAuthTenantOption {
+	normalized := normalizeFeishuOAuthTenantOptions(options)
+	for i := range normalized {
+		normalized[i].ClientSecret = ""
+		normalized[i].ClientSecretConfigured = false
+	}
+	return normalized
+}
+
+func decodeFeishuOAuthTenantOptions(raw string) []FeishuOAuthTenantOption {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var options []FeishuOAuthTenantOption
+	if err := json.Unmarshal([]byte(raw), &options); err != nil {
+		slog.Warn("feishu: failed to decode tenant options setting", "error", err)
+		return nil
+	}
+	return normalizeFeishuOAuthTenantOptions(options)
+}
+
+func encodeFeishuOAuthTenantOptions(options []FeishuOAuthTenantOption) string {
+	normalized := normalizeFeishuOAuthTenantOptions(options)
+	if len(normalized) == 0 {
+		return "[]"
+	}
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 func normalizeWeChatConnectModeSetting(raw string) string {
@@ -726,6 +838,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyCustomEndpoints,
 		SettingKeyLinuxDoConnectEnabled,
 		SettingKeyDingTalkConnectEnabled,
+		SettingKeyFeishuConnectEnabled,
+		SettingKeyFeishuConnectRedirectURL,
+		SettingKeyFeishuConnectTenantOptions,
 		SettingKeyWeChatConnectEnabled,
 		SettingKeyWeChatConnectAppID,
 		SettingKeyWeChatConnectAppSecret,
@@ -780,6 +895,12 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		dingTalkEnabled = raw == "true"
 	} else {
 		dingTalkEnabled = s.cfg != nil && s.cfg.DingTalk.Enabled
+	}
+	feishuEnabled := false
+	if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok && hasExplicitFeishuConnectDBConfig(settings, raw) {
+		feishuEnabled = raw == "true"
+	} else {
+		feishuEnabled = s.cfg != nil && s.cfg.Feishu.Enabled
 	}
 	oidcEnabled := false
 	if raw, ok := settings[SettingKeyOIDCConnectEnabled]; ok {
@@ -851,6 +972,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
 		LinuxDoOAuthEnabled:              linuxDoEnabled,
 		DingTalkOAuthEnabled:             dingTalkEnabled,
+		FeishuOAuthEnabled:               feishuEnabled,
+		FeishuOAuthTenants:               s.feishuOAuthTenantOptions(settings),
 		WeChatOAuthEnabled:               weChatEnabled,
 		WeChatOAuthOpenEnabled:           weChatOpenEnabled,
 		WeChatOAuthMPEnabled:             weChatMPEnabled,
@@ -1135,51 +1258,53 @@ func (s *SettingService) SetVersion(version string) {
 // A unit test diffs this struct's JSON keys against dto.PublicSettings to catch
 // drift automatically (see setting_service_injection_test.go).
 type PublicSettingsInjectionPayload struct {
-	RegistrationEnabled              bool                     `json:"registration_enabled"`
-	EmailVerifyEnabled               bool                     `json:"email_verify_enabled"`
-	RegistrationEmailSuffixWhitelist []string                 `json:"registration_email_suffix_whitelist"`
-	PromoCodeEnabled                 bool                     `json:"promo_code_enabled"`
-	PasswordResetEnabled             bool                     `json:"password_reset_enabled"`
-	InvitationCodeEnabled            bool                     `json:"invitation_code_enabled"`
-	TotpEnabled                      bool                     `json:"totp_enabled"`
-	LoginAgreementEnabled            bool                     `json:"login_agreement_enabled"`
-	LoginAgreementMode               string                   `json:"login_agreement_mode"`
-	LoginAgreementUpdatedAt          string                   `json:"login_agreement_updated_at"`
-	LoginAgreementRevision           string                   `json:"login_agreement_revision"`
-	LoginAgreementDocuments          []LoginAgreementDocument `json:"login_agreement_documents"`
-	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
-	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
-	SiteName                         string                   `json:"site_name"`
-	SiteLogo                         string                   `json:"site_logo"`
-	SiteSubtitle                     string                   `json:"site_subtitle"`
-	APIBaseURL                       string                   `json:"api_base_url"`
-	ContactInfo                      string                   `json:"contact_info"`
-	DocURL                           string                   `json:"doc_url"`
-	HomeContent                      string                   `json:"home_content"`
-	HideCcsImportButton              bool                     `json:"hide_ccs_import_button"`
-	PurchaseSubscriptionEnabled      bool                     `json:"purchase_subscription_enabled"`
-	PurchaseSubscriptionURL          string                   `json:"purchase_subscription_url"`
-	TableDefaultPageSize             int                      `json:"table_default_page_size"`
-	TablePageSizeOptions             []int                    `json:"table_page_size_options"`
-	CustomMenuItems                  json.RawMessage          `json:"custom_menu_items"`
-	CustomEndpoints                  json.RawMessage          `json:"custom_endpoints"`
-	LinuxDoOAuthEnabled              bool                     `json:"linuxdo_oauth_enabled"`
-	DingTalkOAuthEnabled             bool                     `json:"dingtalk_oauth_enabled"`
-	WeChatOAuthEnabled               bool                     `json:"wechat_oauth_enabled"`
-	WeChatOAuthOpenEnabled           bool                     `json:"wechat_oauth_open_enabled"`
-	WeChatOAuthMPEnabled             bool                     `json:"wechat_oauth_mp_enabled"`
-	WeChatOAuthMobileEnabled         bool                     `json:"wechat_oauth_mobile_enabled"`
-	OIDCOAuthEnabled                 bool                     `json:"oidc_oauth_enabled"`
-	OIDCOAuthProviderName            string                   `json:"oidc_oauth_provider_name"`
-	GitHubOAuthEnabled               bool                     `json:"github_oauth_enabled"`
-	GoogleOAuthEnabled               bool                     `json:"google_oauth_enabled"`
-	BackendModeEnabled               bool                     `json:"backend_mode_enabled"`
-	PaymentEnabled                   bool                     `json:"payment_enabled"`
-	Version                          string                   `json:"version"`
-	BalanceLowNotifyEnabled          bool                     `json:"balance_low_notify_enabled"`
-	AccountQuotaNotifyEnabled        bool                     `json:"account_quota_notify_enabled"`
-	BalanceLowNotifyThreshold        float64                  `json:"balance_low_notify_threshold"`
-	BalanceLowNotifyRechargeURL      string                   `json:"balance_low_notify_recharge_url"`
+	RegistrationEnabled              bool                      `json:"registration_enabled"`
+	EmailVerifyEnabled               bool                      `json:"email_verify_enabled"`
+	RegistrationEmailSuffixWhitelist []string                  `json:"registration_email_suffix_whitelist"`
+	PromoCodeEnabled                 bool                      `json:"promo_code_enabled"`
+	PasswordResetEnabled             bool                      `json:"password_reset_enabled"`
+	InvitationCodeEnabled            bool                      `json:"invitation_code_enabled"`
+	TotpEnabled                      bool                      `json:"totp_enabled"`
+	LoginAgreementEnabled            bool                      `json:"login_agreement_enabled"`
+	LoginAgreementMode               string                    `json:"login_agreement_mode"`
+	LoginAgreementUpdatedAt          string                    `json:"login_agreement_updated_at"`
+	LoginAgreementRevision           string                    `json:"login_agreement_revision"`
+	LoginAgreementDocuments          []LoginAgreementDocument  `json:"login_agreement_documents"`
+	TurnstileEnabled                 bool                      `json:"turnstile_enabled"`
+	TurnstileSiteKey                 string                    `json:"turnstile_site_key"`
+	SiteName                         string                    `json:"site_name"`
+	SiteLogo                         string                    `json:"site_logo"`
+	SiteSubtitle                     string                    `json:"site_subtitle"`
+	APIBaseURL                       string                    `json:"api_base_url"`
+	ContactInfo                      string                    `json:"contact_info"`
+	DocURL                           string                    `json:"doc_url"`
+	HomeContent                      string                    `json:"home_content"`
+	HideCcsImportButton              bool                      `json:"hide_ccs_import_button"`
+	PurchaseSubscriptionEnabled      bool                      `json:"purchase_subscription_enabled"`
+	PurchaseSubscriptionURL          string                    `json:"purchase_subscription_url"`
+	TableDefaultPageSize             int                       `json:"table_default_page_size"`
+	TablePageSizeOptions             []int                     `json:"table_page_size_options"`
+	CustomMenuItems                  json.RawMessage           `json:"custom_menu_items"`
+	CustomEndpoints                  json.RawMessage           `json:"custom_endpoints"`
+	LinuxDoOAuthEnabled              bool                      `json:"linuxdo_oauth_enabled"`
+	DingTalkOAuthEnabled             bool                      `json:"dingtalk_oauth_enabled"`
+	FeishuOAuthEnabled               bool                      `json:"feishu_oauth_enabled"`
+	FeishuOAuthTenants               []FeishuOAuthTenantOption `json:"feishu_oauth_tenants"`
+	WeChatOAuthEnabled               bool                      `json:"wechat_oauth_enabled"`
+	WeChatOAuthOpenEnabled           bool                      `json:"wechat_oauth_open_enabled"`
+	WeChatOAuthMPEnabled             bool                      `json:"wechat_oauth_mp_enabled"`
+	WeChatOAuthMobileEnabled         bool                      `json:"wechat_oauth_mobile_enabled"`
+	OIDCOAuthEnabled                 bool                      `json:"oidc_oauth_enabled"`
+	OIDCOAuthProviderName            string                    `json:"oidc_oauth_provider_name"`
+	GitHubOAuthEnabled               bool                      `json:"github_oauth_enabled"`
+	GoogleOAuthEnabled               bool                      `json:"google_oauth_enabled"`
+	BackendModeEnabled               bool                      `json:"backend_mode_enabled"`
+	PaymentEnabled                   bool                      `json:"payment_enabled"`
+	Version                          string                    `json:"version"`
+	BalanceLowNotifyEnabled          bool                      `json:"balance_low_notify_enabled"`
+	AccountQuotaNotifyEnabled        bool                      `json:"account_quota_notify_enabled"`
+	BalanceLowNotifyThreshold        float64                   `json:"balance_low_notify_threshold"`
+	BalanceLowNotifyRechargeURL      string                    `json:"balance_low_notify_recharge_url"`
 
 	// Feature flags — MUST match the opt-in/opt-out registry in
 	// frontend/src/utils/featureFlags.ts. Missing a field here is the bug
@@ -1231,6 +1356,8 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		CustomEndpoints:                  safeRawJSONArray(settings.CustomEndpoints),
 		LinuxDoOAuthEnabled:              settings.LinuxDoOAuthEnabled,
 		DingTalkOAuthEnabled:             settings.DingTalkOAuthEnabled,
+		FeishuOAuthEnabled:               settings.FeishuOAuthEnabled,
+		FeishuOAuthTenants:               settings.FeishuOAuthTenants,
 		WeChatOAuthEnabled:               settings.WeChatOAuthEnabled,
 		WeChatOAuthOpenEnabled:           settings.WeChatOAuthOpenEnabled,
 		WeChatOAuthMPEnabled:             settings.WeChatOAuthMPEnabled,
@@ -1254,6 +1381,16 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		RiskControlEnabled:                   settings.RiskControlEnabled,
 		AllowUserViewErrorRequests:           settings.AllowUserViewErrorRequests,
 	}, nil
+}
+
+func (s *SettingService) feishuOAuthTenantOptions(settings map[string]string) []FeishuOAuthTenantOption {
+	if s == nil || s.cfg == nil {
+		return nil
+	}
+	if raw, ok := settings[SettingKeyFeishuConnectTenantOptions]; ok {
+		return publicFeishuOAuthTenantOptions(decodeFeishuOAuthTenantOptions(raw))
+	}
+	return publicFeishuOAuthTenantOptions(feishuOAuthTenantOptionsFromConfig(s.cfg.Feishu.TenantOptions))
 }
 
 func DefaultWeChatConnectScopesForMode(mode string) string {
@@ -1739,6 +1876,19 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyDingTalkConnectSyncDisplayNameAttrName] = settings.DingTalkConnectSyncDisplayNameAttrName
 	updates[SettingKeyDingTalkConnectSyncDeptAttrName] = settings.DingTalkConnectSyncDeptAttrName
 
+	// Feishu Connect OAuth 登录
+	updates[SettingKeyFeishuConnectEnabled] = strconv.FormatBool(settings.FeishuConnectEnabled)
+	updates[SettingKeyFeishuConnectRedirectURL] = settings.FeishuConnectRedirectURL
+	updates[SettingKeyFeishuConnectTenantOptions] = encodeFeishuOAuthTenantOptions(settings.FeishuConnectTenantOptions)
+	updates[SettingKeyFeishuConnectBypassRegistration] = strconv.FormatBool(settings.FeishuConnectBypassRegistration)
+	updates[SettingKeyFeishuConnectCorpRestrictionPolicy] = settings.FeishuConnectCorpRestrictionPolicy
+	updates[SettingKeyFeishuConnectSyncDisplayName] = strconv.FormatBool(settings.FeishuConnectSyncDisplayName)
+	updates[SettingKeyFeishuConnectSyncCorpEmail] = strconv.FormatBool(settings.FeishuConnectSyncCorpEmail)
+	updates[SettingKeyFeishuConnectSyncDisplayNameAttrKey] = settings.FeishuConnectSyncDisplayNameAttrKey
+	updates[SettingKeyFeishuConnectSyncCorpEmailAttrKey] = settings.FeishuConnectSyncCorpEmailAttrKey
+	updates[SettingKeyFeishuConnectSyncDisplayNameAttrName] = settings.FeishuConnectSyncDisplayNameAttrName
+	updates[SettingKeyFeishuConnectSyncCorpEmailAttrName] = settings.FeishuConnectSyncCorpEmailAttrName
+
 	// Generic OIDC OAuth 登录
 	updates[SettingKeyOIDCConnectEnabled] = strconv.FormatBool(settings.OIDCConnectEnabled)
 	updates[SettingKeyOIDCConnectProviderName] = settings.OIDCConnectProviderName
@@ -1978,6 +2128,7 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 		settings.GitHub.Subscriptions,
 		settings.Google.Subscriptions,
 		settings.DingTalk.Subscriptions,
+		settings.Feishu.Subscriptions,
 	} {
 		if err := s.validateDefaultSubscriptionGroups(ctx, subscriptions); err != nil {
 			return nil, err
@@ -1996,6 +2147,7 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 		{"github", settings.GitHub.PlatformQuotas},
 		{"google", settings.Google.PlatformQuotas},
 		{"dingtalk", settings.DingTalk.PlatformQuotas},
+		{"feishu", settings.Feishu.PlatformQuotas},
 	} {
 		if pgs.pq != nil {
 			if err := validateDefaultPlatformQuotaMap(pgs.pq); err != nil {
@@ -2012,6 +2164,7 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 	writeProviderDefaultGrantUpdates(updates, gitHubAuthSourceDefaultKeys, settings.GitHub)
 	writeProviderDefaultGrantUpdates(updates, googleAuthSourceDefaultKeys, settings.Google)
 	writeProviderDefaultGrantUpdates(updates, dingTalkAuthSourceDefaultKeys, settings.DingTalk)
+	writeProviderDefaultGrantUpdates(updates, feishuAuthSourceDefaultKeys, settings.Feishu)
 	updates[SettingKeyForceEmailOnThirdPartySignup] = strconv.FormatBool(settings.ForceEmailOnThirdPartySignup)
 	return updates, nil
 }
@@ -2580,6 +2733,11 @@ func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*Aut
 		SettingKeyAuthSourceDefaultDingTalkSubscriptions,
 		SettingKeyAuthSourceDefaultDingTalkGrantOnSignup,
 		SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind,
+		SettingKeyAuthSourceDefaultFeishuBalance,
+		SettingKeyAuthSourceDefaultFeishuConcurrency,
+		SettingKeyAuthSourceDefaultFeishuSubscriptions,
+		SettingKeyAuthSourceDefaultFeishuGrantOnSignup,
+		SettingKeyAuthSourceDefaultFeishuGrantOnFirstBind,
 		SettingKeyAuthSourcePlatformQuotas("email"),
 		SettingKeyAuthSourcePlatformQuotas("linuxdo"),
 		SettingKeyAuthSourcePlatformQuotas("oidc"),
@@ -2587,6 +2745,7 @@ func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*Aut
 		SettingKeyAuthSourcePlatformQuotas("github"),
 		SettingKeyAuthSourcePlatformQuotas("google"),
 		SettingKeyAuthSourcePlatformQuotas("dingtalk"),
+		SettingKeyAuthSourcePlatformQuotas("feishu"),
 		SettingKeyForceEmailOnThirdPartySignup,
 	}
 
@@ -2603,6 +2762,7 @@ func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*Aut
 		GitHub:                       parseProviderDefaultGrantSettings(settings, gitHubAuthSourceDefaultKeys),
 		Google:                       parseProviderDefaultGrantSettings(settings, googleAuthSourceDefaultKeys),
 		DingTalk:                     parseProviderDefaultGrantSettings(settings, dingTalkAuthSourceDefaultKeys),
+		Feishu:                       parseProviderDefaultGrantSettings(settings, feishuAuthSourceDefaultKeys),
 		ForceEmailOnThirdPartySignup: settings[SettingKeyForceEmailOnThirdPartySignup] == "true",
 	}, nil
 }
@@ -3105,6 +3265,83 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 			result.DingTalkConnectSyncDeptAttrName = v
 		} else {
 			result.DingTalkConnectSyncDeptAttrName = "钉钉部门"
+		}
+	}
+
+	feishuBase := config.FeishuConnectConfig{}
+	if s.cfg != nil {
+		feishuBase = s.cfg.Feishu
+	}
+	if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok && hasExplicitFeishuConnectDBConfig(settings, raw) {
+		result.FeishuConnectEnabled = raw == "true"
+	} else {
+		result.FeishuConnectEnabled = feishuBase.Enabled
+	}
+	if v, ok := settings[SettingKeyFeishuConnectRedirectURL]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectRedirectURL = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectRedirectURL = strings.TrimSpace(feishuBase.RedirectURL)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectTenantOptions]; ok {
+		result.FeishuConnectTenantOptions = decodeFeishuOAuthTenantOptions(v)
+	} else {
+		result.FeishuConnectTenantOptions = feishuOAuthTenantOptionsFromConfig(feishuBase.TenantOptions)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectBypassRegistration]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectBypassRegistration = strings.EqualFold(strings.TrimSpace(v), "true")
+	} else {
+		result.FeishuConnectBypassRegistration = feishuBase.BypassRegistration
+	}
+	if v, ok := settings[SettingKeyFeishuConnectCorpRestrictionPolicy]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectCorpRestrictionPolicy = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectCorpRestrictionPolicy = feishuBase.CorpRestrictionPolicy
+	}
+	if result.FeishuConnectCorpRestrictionPolicy == "" {
+		result.FeishuConnectCorpRestrictionPolicy = "none"
+	}
+
+	if v, ok := settings[SettingKeyFeishuConnectSyncDisplayName]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectSyncDisplayName = strings.EqualFold(strings.TrimSpace(v), "true")
+	} else {
+		result.FeishuConnectSyncDisplayName = feishuBase.SyncDisplayName
+	}
+	if v, ok := settings[SettingKeyFeishuConnectSyncCorpEmail]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectSyncCorpEmail = strings.EqualFold(strings.TrimSpace(v), "true")
+	} else {
+		result.FeishuConnectSyncCorpEmail = feishuBase.SyncCorpEmail
+	}
+
+	result.FeishuConnectSyncDisplayNameAttrKey = strings.TrimSpace(settings[SettingKeyFeishuConnectSyncDisplayNameAttrKey])
+	if result.FeishuConnectSyncDisplayNameAttrKey == "" {
+		if v := strings.TrimSpace(feishuBase.SyncDisplayNameAttrKey); v != "" {
+			result.FeishuConnectSyncDisplayNameAttrKey = v
+		} else {
+			result.FeishuConnectSyncDisplayNameAttrKey = "feishu_name"
+		}
+	}
+	result.FeishuConnectSyncCorpEmailAttrKey = strings.TrimSpace(settings[SettingKeyFeishuConnectSyncCorpEmailAttrKey])
+	if result.FeishuConnectSyncCorpEmailAttrKey == "" {
+		if v := strings.TrimSpace(feishuBase.SyncCorpEmailAttrKey); v != "" {
+			result.FeishuConnectSyncCorpEmailAttrKey = v
+		} else {
+			result.FeishuConnectSyncCorpEmailAttrKey = "feishu_email"
+		}
+	}
+	result.FeishuConnectSyncDisplayNameAttrName = strings.TrimSpace(settings[SettingKeyFeishuConnectSyncDisplayNameAttrName])
+	if result.FeishuConnectSyncDisplayNameAttrName == "" {
+		if v := strings.TrimSpace(feishuBase.SyncDisplayNameAttrName); v != "" {
+			result.FeishuConnectSyncDisplayNameAttrName = v
+		} else {
+			result.FeishuConnectSyncDisplayNameAttrName = "飞书姓名"
+		}
+	}
+	result.FeishuConnectSyncCorpEmailAttrName = strings.TrimSpace(settings[SettingKeyFeishuConnectSyncCorpEmailAttrName])
+	if result.FeishuConnectSyncCorpEmailAttrName == "" {
+		if v := strings.TrimSpace(feishuBase.SyncCorpEmailAttrName); v != "" {
+			result.FeishuConnectSyncCorpEmailAttrName = v
+		} else {
+			result.FeishuConnectSyncCorpEmailAttrName = "飞书企业邮箱"
 		}
 	}
 
@@ -3977,6 +4214,138 @@ func (s *SettingService) GetDingTalkConnectOAuthConfig(ctx context.Context) (con
 		return config.DingTalkConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", err.Error())
 	}
 
+	return effective, nil
+}
+
+// GetFeishuConnectOAuthConfig 返回用于登录的最终生效 Feishu Connect 配置。
+func (s *SettingService) GetFeishuConnectOAuthConfig(ctx context.Context) (config.FeishuConnectConfig, error) {
+	if s == nil || s.cfg == nil {
+		return config.FeishuConnectConfig{}, infraerrors.ServiceUnavailable("CONFIG_NOT_READY", "config not loaded")
+	}
+
+	effective := s.cfg.Feishu
+	keys := []string{
+		SettingKeyFeishuConnectEnabled,
+		SettingKeyFeishuConnectRedirectURL,
+		SettingKeyFeishuConnectTenantOptions,
+		SettingKeyFeishuConnectBypassRegistration,
+		SettingKeyFeishuConnectCorpRestrictionPolicy,
+		SettingKeyFeishuConnectSyncDisplayName,
+		SettingKeyFeishuConnectSyncCorpEmail,
+		SettingKeyFeishuConnectSyncDisplayNameAttrKey,
+		SettingKeyFeishuConnectSyncCorpEmailAttrKey,
+		SettingKeyFeishuConnectSyncDisplayNameAttrName,
+		SettingKeyFeishuConnectSyncCorpEmailAttrName,
+	}
+	settings, err := s.settingRepo.GetMultiple(ctx, keys)
+	if err != nil {
+		return config.FeishuConnectConfig{}, fmt.Errorf("get feishu connect settings: %w", err)
+	}
+
+	if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok && hasExplicitFeishuConnectDBConfig(settings, raw) {
+		effective.Enabled = raw == "true"
+	}
+	if v, ok := settings[SettingKeyFeishuConnectRedirectURL]; ok && strings.TrimSpace(v) != "" {
+		effective.RedirectURL = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectTenantOptions]; ok {
+		effective.TenantOptions = feishuOAuthTenantOptionsToConfig(decodeFeishuOAuthTenantOptions(v))
+	}
+	if v, ok := settings[SettingKeyFeishuConnectBypassRegistration]; ok && strings.TrimSpace(v) != "" {
+		effective.BypassRegistration = strings.EqualFold(strings.TrimSpace(v), "true")
+	}
+	if v, ok := settings[SettingKeyFeishuConnectCorpRestrictionPolicy]; ok && strings.TrimSpace(v) != "" {
+		effective.CorpRestrictionPolicy = strings.TrimSpace(v)
+	}
+	if effective.CorpRestrictionPolicy == "" {
+		effective.CorpRestrictionPolicy = "none"
+	}
+
+	if v, ok := settings[SettingKeyFeishuConnectSyncDisplayName]; ok && strings.TrimSpace(v) != "" {
+		effective.SyncDisplayName = strings.EqualFold(strings.TrimSpace(v), "true")
+	}
+	if v, ok := settings[SettingKeyFeishuConnectSyncCorpEmail]; ok && strings.TrimSpace(v) != "" {
+		effective.SyncCorpEmail = strings.EqualFold(strings.TrimSpace(v), "true")
+	}
+
+	if v := strings.TrimSpace(settings[SettingKeyFeishuConnectSyncDisplayNameAttrKey]); v != "" {
+		effective.SyncDisplayNameAttrKey = v
+	}
+	if effective.SyncDisplayNameAttrKey == "" {
+		effective.SyncDisplayNameAttrKey = "feishu_name"
+	}
+	if v := strings.TrimSpace(settings[SettingKeyFeishuConnectSyncCorpEmailAttrKey]); v != "" {
+		effective.SyncCorpEmailAttrKey = v
+	}
+	if effective.SyncCorpEmailAttrKey == "" {
+		effective.SyncCorpEmailAttrKey = "feishu_email"
+	}
+	if v := strings.TrimSpace(settings[SettingKeyFeishuConnectSyncDisplayNameAttrName]); v != "" {
+		effective.SyncDisplayNameAttrName = v
+	}
+	if effective.SyncDisplayNameAttrName == "" {
+		effective.SyncDisplayNameAttrName = "飞书姓名"
+	}
+	if v := strings.TrimSpace(settings[SettingKeyFeishuConnectSyncCorpEmailAttrName]); v != "" {
+		effective.SyncCorpEmailAttrName = v
+	}
+	if effective.SyncCorpEmailAttrName == "" {
+		effective.SyncCorpEmailAttrName = "飞书企业邮箱"
+	}
+
+	if !effective.Enabled {
+		return config.FeishuConnectConfig{}, infraerrors.NotFound("OAUTH_DISABLED", "feishu oauth login is disabled")
+	}
+	if len(effective.TenantOptions) == 0 {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu tenant options not configured")
+	}
+	for _, option := range effective.TenantOptions {
+		if strings.TrimSpace(option.ClientID) == "" {
+			return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu tenant option client id not configured")
+		}
+		if strings.TrimSpace(option.ClientSecret) == "" {
+			return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu tenant option client secret not configured")
+		}
+	}
+	if strings.TrimSpace(effective.AuthorizeURL) == "" {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth authorize url not configured")
+	}
+	if strings.TrimSpace(effective.AppAccessTokenURL) == "" {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth app access token url not configured")
+	}
+	if strings.TrimSpace(effective.TokenURL) == "" {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth token url not configured")
+	}
+	if strings.TrimSpace(effective.UserInfoURL) == "" {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth userinfo url not configured")
+	}
+	if strings.TrimSpace(effective.RedirectURL) == "" {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth redirect url not configured")
+	}
+	if strings.TrimSpace(effective.FrontendRedirectURL) == "" {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth frontend redirect url not configured")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.AuthorizeURL); err != nil {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth authorize url invalid")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.AppAccessTokenURL); err != nil {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth app access token url invalid")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.TokenURL); err != nil {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth token url invalid")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.UserInfoURL); err != nil {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth userinfo url invalid")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.RedirectURL); err != nil {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth redirect url invalid")
+	}
+	if err := config.ValidateFrontendRedirectURL(effective.FrontendRedirectURL); err != nil {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth frontend redirect url invalid")
+	}
+	if err := config.ValidateFeishuConfig(effective); err != nil {
+		return config.FeishuConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", err.Error())
+	}
 	return effective, nil
 }
 

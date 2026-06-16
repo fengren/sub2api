@@ -2643,6 +2643,232 @@
             </div>
           </div>
 
+          <!-- Feishu Connect OAuth 登录 -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.feishu.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.feishu.description") }}
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="font-medium text-gray-900 dark:text-white">{{
+                    t("admin.settings.feishu.enable")
+                  }}</label>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.feishu.enableHint") }}
+                  </p>
+                </div>
+                <Toggle v-model="form.feishu_connect_enabled" />
+              </div>
+
+              <div
+                v-if="form.feishu_connect_enabled"
+                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+              >
+                <div class="grid grid-cols-1 gap-6">
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ t("admin.settings.feishu.redirectUrl") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_connect_redirect_url"
+                      type="url"
+                      class="input font-mono text-sm"
+                      :placeholder="t('admin.settings.feishu.redirectUrlPlaceholder')"
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.feishu.redirectUrlHint") }}
+                    </p>
+                  </div>
+
+                  <div class="space-y-3 border-t border-gray-100 pt-4 dark:border-dark-700">
+                    <div class="flex items-center justify-between gap-3">
+                      <div>
+                        <label class="font-medium text-gray-900 dark:text-white">
+                          {{ t("admin.settings.feishu.tenantOptions") }}
+                        </label>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                          {{ t("admin.settings.feishu.tenantOptionsHint") }}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-sm inline-flex items-center gap-1"
+                        @click="addFeishuTenantOption"
+                      >
+                        <Icon name="plus" size="sm" />
+                        {{ t("common.add") }}
+                      </button>
+                    </div>
+
+                    <div
+                      v-if="form.feishu_connect_tenant_options.length === 0"
+                      class="rounded border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400"
+                    >
+                      {{ t("admin.settings.feishu.tenantOptionsEmpty") }}
+                    </div>
+
+                    <div v-else class="space-y-3">
+                      <div
+                        v-for="(tenant, index) in form.feishu_connect_tenant_options"
+                        :key="`feishu-tenant-${index}`"
+                        class="grid grid-cols-1 gap-3 rounded border border-gray-200 p-3 md:grid-cols-[1fr_1.1fr_1.1fr_1.1fr_1fr_auto] dark:border-dark-600"
+                      >
+                        <div>
+                          <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                            {{ t("admin.settings.feishu.tenantName") }}
+                          </label>
+                          <input
+                            v-model="tenant.name"
+                            type="text"
+                            class="input text-sm"
+                            :placeholder="t('admin.settings.feishu.tenantNamePlaceholder')"
+                          />
+                        </div>
+                        <div>
+                          <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                            tenant_key
+                          </label>
+                          <input
+                            v-model="tenant.tenant_key"
+                            type="text"
+                            class="input font-mono text-sm"
+                            placeholder="tenant_key"
+                          />
+                        </div>
+                        <div>
+                          <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                            App ID
+                          </label>
+                          <input
+                            v-model="tenant.client_id"
+                            type="text"
+                            class="input font-mono text-sm"
+                            placeholder="cli_xxxxxxxxxxxxx"
+                          />
+                        </div>
+                        <div>
+                          <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                            App Secret
+                          </label>
+                          <input
+                            v-model="tenant.client_secret"
+                            type="password"
+                            class="input font-mono text-sm"
+                            :placeholder="
+                              tenant.client_secret_configured
+                                ? t('admin.settings.feishu.clientSecretConfiguredPlaceholder')
+                                : t('admin.settings.feishu.clientSecretPlaceholder')
+                            "
+                          />
+                        </div>
+                        <div>
+                          <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                            {{ t("admin.settings.feishu.tenantGroup") }}
+                          </label>
+                          <select v-model.number="tenant.group_id" class="input text-sm">
+                            <option :value="0">{{ t("admin.settings.feishu.tenantGroupNone") }}</option>
+                            <option
+                              v-for="group in defaultSubscriptionGroupOptions"
+                              :key="group.value"
+                              :value="group.value"
+                            >
+                              {{ group.label }}
+                            </option>
+                          </select>
+                        </div>
+                        <div class="flex items-end">
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                            @click="removeFeishuTenantOption(index)"
+                          >
+                            <Icon name="trash" size="sm" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700">
+                    <div>
+                      <label class="font-medium text-gray-900 dark:text-white">
+                        {{ t("admin.settings.feishu.bypassRegistration") }}
+                      </label>
+                      <p class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ t("admin.settings.feishu.bypassRegistrationHint") }}
+                      </p>
+                    </div>
+                    <Toggle v-model="form.feishu_connect_bypass_registration" />
+                  </div>
+
+                  <div class="space-y-2 border-t border-gray-100 pt-4 dark:border-dark-700">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <label class="font-medium text-gray-900 dark:text-white">
+                          {{ t("admin.settings.feishu.syncDisplayName") }}
+                        </label>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                          {{ t("admin.settings.feishu.syncDisplayNameHint") }}
+                        </p>
+                      </div>
+                      <Toggle v-model="form.feishu_connect_sync_display_name" />
+                    </div>
+                    <div v-if="form.feishu_connect_sync_display_name" class="space-y-2">
+                      <input
+                        v-model="form.feishu_connect_sync_display_name_attr_key"
+                        type="text"
+                        placeholder="feishu_name"
+                        class="input max-w-xs text-sm"
+                      />
+                      <input
+                        v-model="form.feishu_connect_sync_display_name_attr_name"
+                        type="text"
+                        placeholder="飞书姓名"
+                        class="input max-w-xs text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="space-y-2 border-t border-gray-100 pt-4 dark:border-dark-700">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <label class="font-medium text-gray-900 dark:text-white">
+                          {{ t("admin.settings.feishu.syncCorpEmail") }}
+                        </label>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                          {{ t("admin.settings.feishu.syncCorpEmailHint") }}
+                        </p>
+                      </div>
+                      <Toggle v-model="form.feishu_connect_sync_corp_email" />
+                    </div>
+                    <div v-if="form.feishu_connect_sync_corp_email" class="space-y-2">
+                      <input
+                        v-model="form.feishu_connect_sync_corp_email_attr_key"
+                        type="text"
+                        placeholder="feishu_email"
+                        class="input max-w-xs text-sm"
+                      />
+                      <input
+                        v-model="form.feishu_connect_sync_corp_email_attr_name"
+                        type="text"
+                        placeholder="飞书企业邮箱"
+                        class="input max-w-xs text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Generic OIDC OAuth 登录 -->
           <div class="card">
             <div
@@ -6712,6 +6938,7 @@ import type {
   SystemSettings,
   UpdateSettingsRequest,
   DefaultSubscriptionSetting,
+  FeishuTenantOption,
   DefaultPlatformQuotasMap,
   OpenAIFastPolicyRule,
   WeChatConnectMode,
@@ -7119,6 +7346,17 @@ const form = reactive<SettingsForm>({
   dingtalk_connect_sync_corp_email_attr_name: "钉钉企业邮箱",
   dingtalk_connect_sync_display_name_attr_name: "钉钉姓名",
   dingtalk_connect_sync_dept_attr_name: "钉钉部门",
+  // Feishu Connect OAuth 登录
+  feishu_connect_enabled: false,
+  feishu_connect_redirect_url: "",
+  feishu_connect_tenant_options: [] as FeishuTenantOption[],
+  feishu_connect_bypass_registration: false,
+  feishu_connect_sync_corp_email: false,
+  feishu_connect_sync_display_name: false,
+  feishu_connect_sync_corp_email_attr_key: "feishu_email",
+  feishu_connect_sync_display_name_attr_key: "feishu_name",
+  feishu_connect_sync_corp_email_attr_name: "飞书企业邮箱",
+  feishu_connect_sync_display_name_attr_name: "飞书姓名",
   wechat_connect_enabled: false,
   wechat_connect_app_id: "",
   wechat_connect_app_secret: "",
@@ -7270,6 +7508,14 @@ const authSourceDefaultsMeta = computed(() => [
     description: localText(
       "通过钉钉首次注册或首次绑定时应用。",
       "Applied on first signup or first bind through DingTalk.",
+    ),
+  },
+  {
+    source: "feishu" as AuthSourceType,
+    title: "飞书",
+    description: localText(
+      "通过飞书首次注册或首次绑定时应用。",
+      "Applied on first signup or first bind through Feishu.",
     ),
   },
 ]);
@@ -7827,6 +8073,11 @@ async function loadSettings() {
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_updated_at =
       settings.login_agreement_updated_at || "2026-03-31";
+    form.feishu_connect_tenant_options = normalizeFeishuTenantOptions(
+      Array.isArray(settings.feishu_connect_tenant_options)
+        ? settings.feishu_connect_tenant_options
+        : [],
+    ).map((tenant) => ({ ...tenant, group_id: tenant.group_id || 0 }));
     form.login_agreement_documents =
       Array.isArray(settings.login_agreement_documents) &&
       settings.login_agreement_documents.length > 0
@@ -8087,6 +8338,33 @@ async function saveSettings() {
       form.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_documents = normalizedLoginAgreementDocuments;
 
+    const normalizedFeishuTenantOptions = normalizeFeishuTenantOptions(
+      form.feishu_connect_tenant_options,
+    );
+    if (form.feishu_connect_enabled) {
+      if (normalizedFeishuTenantOptions.length === 0) {
+        appStore.showError(
+          localText(
+            "启用飞书登录时，至少需要配置一个组织。",
+            "At least one organization is required when Feishu login is enabled.",
+          ),
+        );
+        return;
+      }
+      const invalidTenant = normalizedFeishuTenantOptions.find(
+        (tenant) => !tenant.client_id || (!tenant.client_secret && !tenant.client_secret_configured),
+      );
+      if (invalidTenant) {
+        appStore.showError(
+          localText(
+            `飞书组织 ${invalidTenant.name || invalidTenant.tenant_key} 需要填写 App ID 和 App Secret。`,
+            `Feishu organization ${invalidTenant.name || invalidTenant.tenant_key} requires App ID and App Secret.`,
+          ),
+        );
+        return;
+      }
+    }
+
     const normalizedDefaultSubscriptions = normalizeDefaultSubscriptionSettings(
       form.default_subscriptions,
     );
@@ -8228,6 +8506,16 @@ async function saveSettings() {
       dingtalk_connect_sync_corp_email_attr_name: form.dingtalk_connect_sync_corp_email_attr_name,
       dingtalk_connect_sync_display_name_attr_name: form.dingtalk_connect_sync_display_name_attr_name,
       dingtalk_connect_sync_dept_attr_name: form.dingtalk_connect_sync_dept_attr_name,
+      feishu_connect_enabled: form.feishu_connect_enabled,
+      feishu_connect_redirect_url: form.feishu_connect_redirect_url,
+      feishu_connect_tenant_options: normalizedFeishuTenantOptions,
+      feishu_connect_bypass_registration: form.feishu_connect_bypass_registration,
+      feishu_connect_sync_corp_email: form.feishu_connect_sync_corp_email,
+      feishu_connect_sync_display_name: form.feishu_connect_sync_display_name,
+      feishu_connect_sync_corp_email_attr_key: form.feishu_connect_sync_corp_email_attr_key,
+      feishu_connect_sync_display_name_attr_key: form.feishu_connect_sync_display_name_attr_key,
+      feishu_connect_sync_corp_email_attr_name: form.feishu_connect_sync_corp_email_attr_name,
+      feishu_connect_sync_display_name_attr_name: form.feishu_connect_sync_display_name_attr_name,
       wechat_connect_enabled: form.wechat_connect_enabled,
       wechat_connect_app_id:
         form.wechat_connect_open_app_id ||
@@ -8395,6 +8683,13 @@ async function saveSettings() {
 
     payload.default_platform_quotas = sanitizePlatformQuotasMap(form.default_platform_quotas);
     appendAuthSourceDefaultsToUpdateRequest(payload, authSourceDefaults);
+    payload.feishu_connect_tenant_options = normalizedFeishuTenantOptions;
+    if (import.meta.env.DEV) {
+      console.debug(
+        "[settings] feishu_connect_tenant_options payload",
+        normalizedFeishuTenantOptions,
+      );
+    }
 
     const updated = await adminAPI.settings.updateSettings(payload);
     for (const [key, value] of Object.entries(updated)) {
@@ -8403,6 +8698,11 @@ async function saveSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.feishu_connect_tenant_options = normalizeFeishuTenantOptions(
+      Array.isArray(updated.feishu_connect_tenant_options)
+        ? updated.feishu_connect_tenant_options
+        : [],
+    ).map((tenant) => ({ ...tenant, group_id: tenant.group_id || 0 }));
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
     registrationEmailSuffixWhitelistTags.value =
@@ -9116,6 +9416,45 @@ function showProviderEnablementConflict(
   );
 }
 
+function addFeishuTenantOption() {
+  form.feishu_connect_tenant_options.push({
+    name: "",
+    tenant_key: "",
+    client_id: "",
+    client_secret: "",
+    client_secret_configured: false,
+    group_id: 0,
+  });
+}
+
+function removeFeishuTenantOption(index: number) {
+  form.feishu_connect_tenant_options.splice(index, 1);
+}
+
+function normalizeFeishuTenantOptions(
+  options: FeishuTenantOption[],
+): FeishuTenantOption[] {
+  const seen = new Set<string>();
+  return options.reduce<FeishuTenantOption[]>((items, option) => {
+    const tenantKey = option.tenant_key.trim();
+    if (!tenantKey || seen.has(tenantKey)) return items;
+    seen.add(tenantKey);
+    const name = option.name.trim() || tenantKey;
+    const clientID = option.client_id?.trim() || "";
+    const clientSecret = option.client_secret?.trim() || "";
+    const groupID = Number(option.group_id || 0);
+    items.push({
+      name,
+      tenant_key: tenantKey,
+      ...(clientID ? { client_id: clientID } : {}),
+      ...(clientSecret ? { client_secret: clientSecret } : {}),
+      ...(option.client_secret_configured ? { client_secret_configured: true } : {}),
+      ...(groupID > 0 ? { group_id: groupID } : {}),
+    });
+    return items;
+  }, []);
+}
+
 async function loadProviders() {
   providersLoading.value = true;
   try {
@@ -9652,6 +9991,7 @@ watch(
     }
   },
 );
+
 </script>
 
 <style scoped>

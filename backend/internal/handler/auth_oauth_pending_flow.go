@@ -52,8 +52,9 @@ type oauthPendingSessionPayload struct {
 }
 
 type oauthAdoptionDecisionRequest struct {
-	AdoptDisplayName *bool `json:"adopt_display_name,omitempty"`
-	AdoptAvatar      *bool `json:"adopt_avatar,omitempty"`
+	AdoptDisplayName  *bool  `json:"adopt_display_name,omitempty"`
+	AdoptAvatar       *bool  `json:"adopt_avatar,omitempty"`
+	PendingOAuthToken string `json:"pending_oauth_token,omitempty"`
 }
 
 type bindPendingOAuthLoginRequest struct {
@@ -162,6 +163,10 @@ func readOAuthPendingSessionCookie(c *gin.Context) (string, error) {
 }
 
 func redirectToFrontendCallback(c *gin.Context, frontendCallback string) {
+	redirectToFrontendCallbackWithToken(c, frontendCallback, "")
+}
+
+func redirectToFrontendCallbackWithToken(c *gin.Context, frontendCallback string, sessionToken string) {
 	u, err := url.Parse(frontendCallback)
 	if err != nil {
 		c.Redirect(http.StatusFound, linuxDoOAuthDefaultRedirectTo)
@@ -171,16 +176,31 @@ func redirectToFrontendCallback(c *gin.Context, frontendCallback string) {
 		c.Redirect(http.StatusFound, linuxDoOAuthDefaultRedirectTo)
 		return
 	}
-	u.Fragment = ""
+	fragment := url.Values{}
+	if strings.TrimSpace(sessionToken) != "" {
+		fragment.Set("pending_oauth_token", truncateFragmentValue(sessionToken))
+	}
+	u.Fragment = fragment.Encode()
+	slog.Info("redirect to frontend callback",
+		"frontend_callback", frontendCallback,
+		"session_token_len", len(sessionToken),
+		"has_fragment_param", strings.TrimSpace(sessionToken) != "",
+		"redirect_url", u.String(),
+	)
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
 	c.Redirect(http.StatusFound, u.String())
 }
 
 func (h *AuthHandler) createOAuthPendingSession(c *gin.Context, payload oauthPendingSessionPayload) error {
+	_, err := h.createOAuthPendingSessionWithToken(c, payload)
+	return err
+}
+
+func (h *AuthHandler) createOAuthPendingSessionWithToken(c *gin.Context, payload oauthPendingSessionPayload) (string, error) {
 	svc, err := h.pendingIdentityService()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	session, err := svc.CreatePendingSession(c.Request.Context(), service.CreatePendingAuthSessionInput{
@@ -204,11 +224,15 @@ func (h *AuthHandler) createOAuthPendingSession(c *gin.Context, payload oauthPen
 			"resolved_email_len", len(strings.TrimSpace(payload.ResolvedEmail)),
 			"has_target_user", payload.TargetUserID != nil,
 			"error", err.Error())
-		return infraerrors.InternalServer("PENDING_AUTH_SESSION_CREATE_FAILED", "failed to create pending auth session").WithCause(err)
+		return "", infraerrors.InternalServer("PENDING_AUTH_SESSION_CREATE_FAILED", "failed to create pending auth session").WithCause(err)
 	}
 
 	setOAuthPendingSessionCookie(c, session.SessionToken, isRequestHTTPS(c))
-	return nil
+	slog.Info("pending auth session cookie set",
+		"session_token_len", len(session.SessionToken),
+		"secure", isRequestHTTPS(c),
+	)
+	return session.SessionToken, nil
 }
 
 func readCompletionResponse(session map[string]any) (map[string]any, bool) {
@@ -1842,16 +1866,34 @@ func (h *AuthHandler) ExchangePendingOAuthCompletion(c *gin.Context) {
 	}
 
 	sessionToken, err := readOAuthPendingSessionCookie(c)
+	useBodyToken := false
 	if err != nil || strings.TrimSpace(sessionToken) == "" {
-		clearCookies()
-		response.ErrorFrom(c, service.ErrPendingAuthSessionNotFound)
-		return
+		bodyToken := strings.TrimSpace(adoptionDecision.PendingOAuthToken)
+		if bodyToken == "" {
+			slog.Warn("pending exchange session token missing",
+				"cookie_error", err,
+				"cookie_token_len", len(sessionToken),
+				"body_token_len", len(bodyToken),
+			)
+			clearCookies()
+			response.ErrorFrom(c, service.ErrPendingAuthSessionNotFound)
+			return
+		}
+		slog.Info("pending exchange fallback to body token",
+			"body_token_len", len(bodyToken),
+		)
+		sessionToken = bodyToken
+		useBodyToken = true
 	}
 	browserSessionKey, err := readOAuthPendingBrowserCookie(c)
 	if err != nil || strings.TrimSpace(browserSessionKey) == "" {
-		clearCookies()
-		response.ErrorFrom(c, service.ErrPendingAuthBrowserMismatch)
-		return
+		if useBodyToken {
+			browserSessionKey = ""
+		} else {
+			clearCookies()
+			response.ErrorFrom(c, service.ErrPendingAuthBrowserMismatch)
+			return
+		}
 	}
 
 	svc, err := h.pendingIdentityService()
@@ -1861,8 +1903,18 @@ func (h *AuthHandler) ExchangePendingOAuthCompletion(c *gin.Context) {
 		return
 	}
 
-	session, err := svc.GetBrowserSession(c.Request.Context(), sessionToken, browserSessionKey)
+	var session *dbent.PendingAuthSession
+	if useBodyToken {
+		session, err = svc.GetSessionByToken(c.Request.Context(), sessionToken)
+	} else {
+		session, err = svc.GetBrowserSession(c.Request.Context(), sessionToken, browserSessionKey)
+	}
 	if err != nil {
+		slog.Warn("pending exchange session lookup failed",
+			"use_body_token", useBodyToken,
+			"session_token_len", len(sessionToken),
+			"error", err.Error(),
+		)
 		clearCookies()
 		response.ErrorFrom(c, err)
 		return

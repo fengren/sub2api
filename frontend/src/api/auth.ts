@@ -156,6 +156,24 @@ export async function getCurrentUser() {
   return apiClient.get<CurrentUserResponse>('/auth/me')
 }
 
+export interface FeishuOAuthQRInitResponse {
+  ticket_id: string
+  qr_url: string
+  goto_url: string
+  sdk_url: string
+  expires_in: number
+}
+
+export async function initFeishuOAuthQRCode(redirectTo: string, tenantKey?: string): Promise<FeishuOAuthQRInitResponse> {
+  const { data } = await apiClient.get<FeishuOAuthQRInitResponse>('/auth/oauth/feishu/qr/init', {
+    params: {
+      redirect: redirectTo,
+      tenant_key: tenantKey || undefined,
+    }
+  })
+  return data
+}
+
 /**
  * User logout
  * Clears authentication token and user data from localStorage
@@ -592,7 +610,7 @@ export async function completeWeChatOAuthRegistration(
 }
 
 async function createPendingOAuthAccount(
-  provider: 'linuxdo' | 'oidc' | 'wechat' | 'dingtalk',
+  provider: 'linuxdo' | 'oidc' | 'wechat' | 'dingtalk' | 'feishu',
   invitationCode: string,
   decision?: OAuthAdoptionDecision,
   affiliateCode?: string
@@ -641,20 +659,36 @@ export async function createPendingDingTalkOAuthAccount(
   return createPendingOAuthAccount('dingtalk', invitationCode, decision, affiliateCode)
 }
 
+export async function createPendingFeishuOAuthAccount(
+  invitationCode: string,
+  decision?: OAuthAdoptionDecision,
+  affiliateCode?: string
+): Promise<PendingOAuthCreateAccountResponse> {
+  return createPendingOAuthAccount('feishu', invitationCode, decision, affiliateCode)
+}
+
 export async function completePendingOAuthBindLogin(
-  decision?: OAuthAdoptionDecision
+  decision?: OAuthAdoptionDecision,
+  pendingOAuthToken?: string
 ): Promise<PendingOAuthBindLoginResponse> {
+  const body: Record<string, unknown> = {
+    ...serializeOAuthAdoptionDecision(decision)
+  }
+  if (pendingOAuthToken) {
+    body.pending_oauth_token = pendingOAuthToken
+  }
   const { data } = await apiClient.post<PendingOAuthBindLoginResponse>(
     '/auth/oauth/pending/exchange',
-    serializeOAuthAdoptionDecision(decision)
+    body
   )
   return data
 }
 
 export async function exchangePendingOAuthCompletion(
-  decision?: OAuthAdoptionDecision
+  decision?: OAuthAdoptionDecision,
+  pendingOAuthToken?: string
 ): Promise<PendingOAuthExchangeResponse> {
-  return completePendingOAuthBindLogin(decision)
+  return completePendingOAuthBindLogin(decision, pendingOAuthToken)
 }
 
 export const authAPI = {
@@ -692,7 +726,8 @@ export const authAPI = {
   completeLinuxDoOAuthRegistration,
   completeOIDCOAuthRegistration,
   completeWeChatOAuthRegistration,
-  createPendingDingTalkOAuthAccount
+  createPendingDingTalkOAuthAccount,
+  createPendingFeishuOAuthAccount
 }
 
 export default authAPI

@@ -11,7 +11,7 @@
         </p>
       </div>
       <!-- Login Form -->
-      <form @submit.prevent="handleLogin" class="space-y-5">
+      <form v-if="activeLoginMethod === 'email'" @submit.prevent="handleLogin" class="space-y-5">
         <!-- Email Input -->
         <div>
           <label for="email" class="input-label">
@@ -131,7 +131,7 @@
           @open="showAgreementModal = true"
         />
 
-        <div v-if="showOAuthLogin" class="space-y-3 pt-1">
+        <div v-if="showNonFeishuOAuthLogin" class="space-y-3 pt-1">
           <div class="flex items-center gap-3">
             <div class="h-px flex-1 bg-gray-200 dark:bg-dark-700"></div>
             <span class="text-xs text-gray-500 dark:text-dark-400">
@@ -170,6 +170,54 @@
           />
         </div>
       </form>
+
+      <div v-else-if="activeLoginMethod === 'feishu' && feishuOAuthEnabled">
+        <LoginAgreementPrompt
+          v-if="loginAgreementEnabled"
+          :accepted="agreementAccepted"
+          :documents="loginAgreementDocuments"
+          :mode="loginAgreementMode"
+          :updated-at="loginAgreementUpdatedAt"
+          :visible="showAgreementModal"
+          @accept="acceptLoginAgreement"
+          @reject="rejectLoginAgreement"
+          @open="showAgreementModal = true"
+        />
+
+        <FeishuOAuthSection
+          :disabled="authActionDisabled"
+          :show-divider="false"
+        />
+      </div>
+
+      <div v-if="feishuOAuthEnabled" class="pt-1">
+        <div class="grid grid-cols-2 rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-dark-700 dark:bg-dark-900">
+          <button
+            type="button"
+            class="rounded-md px-3 py-2 text-sm font-medium transition-colors"
+            :class="
+              activeLoginMethod === 'email'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-800 dark:text-white'
+                : 'text-gray-500 hover:text-gray-700 dark:text-dark-300 dark:hover:text-white'
+            "
+            @click="activeLoginMethod = 'email'"
+          >
+            {{ t('auth.emailPasswordLogin') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-3 py-2 text-sm font-medium transition-colors"
+            :class="
+              activeLoginMethod === 'feishu'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-800 dark:text-white'
+                : 'text-gray-500 hover:text-gray-700 dark:text-dark-300 dark:hover:text-white'
+            "
+            @click="activeLoginMethod = 'feishu'"
+          >
+            {{ t('auth.feishu.signIn') }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Footer -->
@@ -204,6 +252,7 @@ import { useI18n } from 'vue-i18n'
 import { AuthLayout } from '@/components/layout'
 import LinuxDoOAuthSection from '@/components/auth/LinuxDoOAuthSection.vue'
 import DingTalkOAuthSection from '@/components/auth/DingTalkOAuthSection.vue'
+import FeishuOAuthSection from '@/components/auth/FeishuOAuthSection.vue'
 import OidcOAuthSection from '@/components/auth/OidcOAuthSection.vue'
 import WechatOAuthSection from '@/components/auth/WechatOAuthSection.vue'
 import EmailOAuthButtons from '@/components/auth/EmailOAuthButtons.vue'
@@ -232,12 +281,14 @@ const isLoading = ref<boolean>(false)
 const errorMessage = ref<string>('')
 const showPassword = ref<boolean>(false)
 const publicSettingsLoaded = ref<boolean>(false)
+const activeLoginMethod = ref<'email' | 'feishu'>('email')
 
 // Public settings
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
 const linuxdoOAuthEnabled = ref<boolean>(false)
 const dingtalkOAuthEnabled = ref<boolean>(false)
+const feishuOAuthEnabled = ref<boolean>(false)
 const wechatOAuthEnabled = ref<boolean>(false)
 const backendModeEnabled = ref<boolean>(false)
 const oidcOAuthEnabled = ref<boolean>(false)
@@ -286,7 +337,7 @@ const authActionDisabled = computed(
   () => isLoading.value || !publicSettingsLoaded.value || agreementGateActive.value
 )
 
-const showOAuthLogin = computed(
+const showNonFeishuOAuthLogin = computed(
   () =>
     !backendModeEnabled.value &&
     (linuxdoOAuthEnabled.value ||
@@ -320,6 +371,7 @@ onMounted(async () => {
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
     dingtalkOAuthEnabled.value = settings.dingtalk_oauth_enabled ?? false
+    feishuOAuthEnabled.value = settings.feishu_oauth_enabled ?? false
     wechatOAuthEnabled.value = isWeChatWebOAuthEnabled(settings)
     backendModeEnabled.value = settings.backend_mode_enabled
     oidcOAuthEnabled.value = settings.oidc_oauth_enabled
@@ -329,6 +381,9 @@ onMounted(async () => {
     backendModeEnabled.value = settings.backend_mode_enabled
     passwordResetEnabled.value = settings.password_reset_enabled
     applyLoginAgreementSettings(settings)
+    if (!feishuOAuthEnabled.value && activeLoginMethod.value === 'feishu') {
+      activeLoginMethod.value = 'email'
+    }
   } catch (error) {
     console.error('Failed to load public settings:', error)
     loginAgreementEnabled.value = false

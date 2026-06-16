@@ -163,6 +163,17 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		DingTalkConnectSyncCorpEmailAttrName:   settings.DingTalkConnectSyncCorpEmailAttrName,
 		DingTalkConnectSyncDisplayNameAttrName: settings.DingTalkConnectSyncDisplayNameAttrName,
 		DingTalkConnectSyncDeptAttrName:        settings.DingTalkConnectSyncDeptAttrName,
+		FeishuConnectEnabled:                   settings.FeishuConnectEnabled,
+		FeishuConnectRedirectURL:               settings.FeishuConnectRedirectURL,
+		FeishuConnectTenantOptions:             feishuTenantOptionsForResponse(settings.FeishuConnectTenantOptions),
+		FeishuConnectBypassRegistration:        settings.FeishuConnectBypassRegistration,
+		FeishuConnectCorpRestrictionPolicy:     settings.FeishuConnectCorpRestrictionPolicy,
+		FeishuConnectSyncCorpEmail:             settings.FeishuConnectSyncCorpEmail,
+		FeishuConnectSyncDisplayName:           settings.FeishuConnectSyncDisplayName,
+		FeishuConnectSyncCorpEmailAttrKey:      settings.FeishuConnectSyncCorpEmailAttrKey,
+		FeishuConnectSyncDisplayNameAttrKey:    settings.FeishuConnectSyncDisplayNameAttrKey,
+		FeishuConnectSyncCorpEmailAttrName:     settings.FeishuConnectSyncCorpEmailAttrName,
+		FeishuConnectSyncDisplayNameAttrName:   settings.FeishuConnectSyncDisplayNameAttrName,
 		WeChatConnectEnabled:                   settings.WeChatConnectEnabled,
 		WeChatConnectAppID:                     settings.WeChatConnectAppID,
 		WeChatConnectAppSecretConfigured:       settings.WeChatConnectAppSecretConfigured,
@@ -438,6 +449,19 @@ type UpdateSettingsRequest struct {
 	DingTalkConnectSyncDisplayNameAttrName string `json:"dingtalk_connect_sync_display_name_attr_name"`
 	DingTalkConnectSyncDeptAttrName        string `json:"dingtalk_connect_sync_dept_attr_name"`
 
+	// Feishu Connect OAuth 登录
+	FeishuConnectEnabled                 bool                              `json:"feishu_connect_enabled"`
+	FeishuConnectRedirectURL             string                            `json:"feishu_connect_redirect_url"`
+	FeishuConnectTenantOptions           []service.FeishuOAuthTenantOption `json:"feishu_connect_tenant_options"`
+	FeishuConnectBypassRegistration      bool                              `json:"feishu_connect_bypass_registration"`
+	FeishuConnectCorpRestrictionPolicy   string                            `json:"feishu_connect_corp_restriction_policy"`
+	FeishuConnectSyncCorpEmail           bool                              `json:"feishu_connect_sync_corp_email"`
+	FeishuConnectSyncDisplayName         bool                              `json:"feishu_connect_sync_display_name"`
+	FeishuConnectSyncCorpEmailAttrKey    string                            `json:"feishu_connect_sync_corp_email_attr_key"`
+	FeishuConnectSyncDisplayNameAttrKey  string                            `json:"feishu_connect_sync_display_name_attr_key"`
+	FeishuConnectSyncCorpEmailAttrName   string                            `json:"feishu_connect_sync_corp_email_attr_name"`
+	FeishuConnectSyncDisplayNameAttrName string                            `json:"feishu_connect_sync_display_name_attr_name"`
+
 	// WeChat Connect OAuth 登录
 	WeChatConnectEnabled             bool   `json:"wechat_connect_enabled"`
 	WeChatConnectAppID               string `json:"wechat_connect_app_id"`
@@ -551,6 +575,11 @@ type UpdateSettingsRequest struct {
 	AuthSourceDefaultDingTalkSubscriptions    *[]dto.DefaultSubscriptionSetting `json:"auth_source_default_dingtalk_subscriptions"`
 	AuthSourceDefaultDingTalkGrantOnSignup    *bool                             `json:"auth_source_default_dingtalk_grant_on_signup"`
 	AuthSourceDefaultDingTalkGrantOnFirstBind *bool                             `json:"auth_source_default_dingtalk_grant_on_first_bind"`
+	AuthSourceDefaultFeishuBalance            *float64                          `json:"auth_source_default_feishu_balance"`
+	AuthSourceDefaultFeishuConcurrency        *int                              `json:"auth_source_default_feishu_concurrency"`
+	AuthSourceDefaultFeishuSubscriptions      *[]dto.DefaultSubscriptionSetting `json:"auth_source_default_feishu_subscriptions"`
+	AuthSourceDefaultFeishuGrantOnSignup      *bool                             `json:"auth_source_default_feishu_grant_on_signup"`
+	AuthSourceDefaultFeishuGrantOnFirstBind   *bool                             `json:"auth_source_default_feishu_grant_on_first_bind"`
 	ForceEmailOnThirdPartySignup              *bool                             `json:"force_email_on_third_party_signup"`
 
 	// Model fallback configuration
@@ -660,6 +689,7 @@ type UpdateSettingsRequest struct {
 	AuthSourceGitHubPlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_github_platform_quotas"`
 	AuthSourceGooglePlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_google_platform_quotas"`
 	AuthSourceDingTalkPlatformQuotas map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_dingtalk_platform_quotas"`
+	AuthSourceFeishuPlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_feishu_platform_quotas"`
 
 	AllowUserViewErrorRequests *bool `json:"allow_user_view_error_requests"`
 }
@@ -749,6 +779,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	req.AuthSourceDefaultOIDCSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultOIDCSubscriptions)
 	req.AuthSourceDefaultWeChatSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultWeChatSubscriptions)
 	req.AuthSourceDefaultDingTalkSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultDingTalkSubscriptions)
+	req.AuthSourceDefaultFeishuSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultFeishuSubscriptions)
 
 	// SMTP 配置保护：如果请求中 smtp_host 为空但数据库中已有配置，则保留已有 SMTP 配置
 	// 防止前端加载设置失败时空表单覆盖已保存的 SMTP 配置
@@ -956,6 +987,71 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.DingTalkConnectSyncDeptAttrName = strings.TrimSpace(req.DingTalkConnectSyncDeptAttrName)
 		if req.DingTalkConnectSyncDeptAttrName == "" {
 			req.DingTalkConnectSyncDeptAttrName = "钉钉部门"
+		}
+	}
+
+	if req.FeishuConnectEnabled {
+		req.FeishuConnectRedirectURL = strings.TrimSpace(req.FeishuConnectRedirectURL)
+		req.FeishuConnectTenantOptions = normalizeFeishuTenantOptionsForRequest(req.FeishuConnectTenantOptions, previousSettings.FeishuConnectTenantOptions)
+
+		req.FeishuConnectRedirectURL = strings.TrimSpace(firstNonEmpty(req.FeishuConnectRedirectURL, previousSettings.FeishuConnectRedirectURL))
+
+		// 校验飞书配置
+		feishuTenantOptions := make([]config.FeishuTenantOptionConfig, 0, len(req.FeishuConnectTenantOptions))
+		for _, option := range req.FeishuConnectTenantOptions {
+			feishuTenantOptions = append(feishuTenantOptions, config.FeishuTenantOptionConfig{
+				Name:         option.Name,
+				TenantKey:    option.TenantKey,
+				ClientID:     option.ClientID,
+				ClientSecret: option.ClientSecret,
+				GroupID:      option.GroupID,
+			})
+		}
+		feishuCfg := config.FeishuConnectConfig{
+			Enabled:       true,
+			TenantOptions: feishuTenantOptions,
+		}
+		if err := config.ValidateFeishuConfig(feishuCfg); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+
+		req.FeishuConnectSyncCorpEmailAttrKey = strings.TrimSpace(req.FeishuConnectSyncCorpEmailAttrKey)
+		if req.FeishuConnectSyncCorpEmailAttrKey == "" {
+			if v := strings.TrimSpace(previousSettings.FeishuConnectSyncCorpEmailAttrKey); v != "" {
+				req.FeishuConnectSyncCorpEmailAttrKey = v
+			} else {
+				req.FeishuConnectSyncCorpEmailAttrKey = "feishu_email"
+			}
+		}
+		req.FeishuConnectSyncDisplayNameAttrKey = strings.TrimSpace(req.FeishuConnectSyncDisplayNameAttrKey)
+		if req.FeishuConnectSyncDisplayNameAttrKey == "" {
+			if v := strings.TrimSpace(previousSettings.FeishuConnectSyncDisplayNameAttrKey); v != "" {
+				req.FeishuConnectSyncDisplayNameAttrKey = v
+			} else {
+				req.FeishuConnectSyncDisplayNameAttrKey = "feishu_name"
+			}
+		}
+
+		req.FeishuConnectSyncCorpEmailAttrName = strings.TrimSpace(req.FeishuConnectSyncCorpEmailAttrName)
+		if req.FeishuConnectSyncCorpEmailAttrName == "" {
+			req.FeishuConnectSyncCorpEmailAttrName = "飞书企业邮箱"
+		}
+		req.FeishuConnectSyncDisplayNameAttrName = strings.TrimSpace(req.FeishuConnectSyncDisplayNameAttrName)
+		if req.FeishuConnectSyncDisplayNameAttrName == "" {
+			req.FeishuConnectSyncDisplayNameAttrName = "飞书姓名"
+		}
+		req.FeishuConnectCorpRestrictionPolicy = strings.ToLower(strings.TrimSpace(req.FeishuConnectCorpRestrictionPolicy))
+		if req.FeishuConnectCorpRestrictionPolicy == "" {
+			if v := strings.TrimSpace(previousSettings.FeishuConnectCorpRestrictionPolicy); v != "" {
+				req.FeishuConnectCorpRestrictionPolicy = v
+			} else {
+				req.FeishuConnectCorpRestrictionPolicy = "none"
+			}
+		}
+		if req.FeishuConnectCorpRestrictionPolicy != "none" && req.FeishuConnectCorpRestrictionPolicy != "internal_only" {
+			response.BadRequest(c, "feishu_connect.corp_restriction_policy must be 'none' or 'internal_only'")
+			return
 		}
 	}
 
@@ -1514,6 +1610,17 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DingTalkConnectSyncCorpEmailAttrName:   req.DingTalkConnectSyncCorpEmailAttrName,
 		DingTalkConnectSyncDisplayNameAttrName: req.DingTalkConnectSyncDisplayNameAttrName,
 		DingTalkConnectSyncDeptAttrName:        req.DingTalkConnectSyncDeptAttrName,
+		FeishuConnectEnabled:                   req.FeishuConnectEnabled,
+		FeishuConnectRedirectURL:               req.FeishuConnectRedirectURL,
+		FeishuConnectTenantOptions:             req.FeishuConnectTenantOptions,
+		FeishuConnectBypassRegistration:        req.FeishuConnectBypassRegistration,
+		FeishuConnectCorpRestrictionPolicy:     req.FeishuConnectCorpRestrictionPolicy,
+		FeishuConnectSyncCorpEmail:             req.FeishuConnectSyncCorpEmail,
+		FeishuConnectSyncDisplayName:           req.FeishuConnectSyncDisplayName,
+		FeishuConnectSyncCorpEmailAttrKey:      req.FeishuConnectSyncCorpEmailAttrKey,
+		FeishuConnectSyncDisplayNameAttrKey:    req.FeishuConnectSyncDisplayNameAttrKey,
+		FeishuConnectSyncCorpEmailAttrName:     req.FeishuConnectSyncCorpEmailAttrName,
+		FeishuConnectSyncDisplayNameAttrName:   req.FeishuConnectSyncDisplayNameAttrName,
 		WeChatConnectEnabled:                   req.WeChatConnectEnabled,
 		WeChatConnectAppID:                     req.WeChatConnectAppID,
 		WeChatConnectAppSecret:                 req.WeChatConnectAppSecret,
@@ -1830,6 +1937,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			GrantOnFirstBind: boolValueOrDefault(req.AuthSourceDefaultDingTalkGrantOnFirstBind, previousAuthSourceDefaults.DingTalk.GrantOnFirstBind),
 			PlatformQuotas:   platformQuotasValueOrDefault(req.AuthSourceDingTalkPlatformQuotas, previousAuthSourceDefaults.DingTalk.PlatformQuotas),
 		},
+		Feishu: service.ProviderDefaultGrantSettings{
+			Balance:          float64ValueOrDefault(req.AuthSourceDefaultFeishuBalance, previousAuthSourceDefaults.Feishu.Balance),
+			Concurrency:      intValueOrDefault(req.AuthSourceDefaultFeishuConcurrency, previousAuthSourceDefaults.Feishu.Concurrency),
+			Subscriptions:    defaultSubscriptionsValueOrDefault(req.AuthSourceDefaultFeishuSubscriptions, previousAuthSourceDefaults.Feishu.Subscriptions),
+			GrantOnSignup:    boolValueOrDefault(req.AuthSourceDefaultFeishuGrantOnSignup, previousAuthSourceDefaults.Feishu.GrantOnSignup),
+			GrantOnFirstBind: boolValueOrDefault(req.AuthSourceDefaultFeishuGrantOnFirstBind, previousAuthSourceDefaults.Feishu.GrantOnFirstBind),
+			PlatformQuotas:   platformQuotasValueOrDefault(req.AuthSourceFeishuPlatformQuotas, previousAuthSourceDefaults.Feishu.PlatformQuotas),
+		},
 		ForceEmailOnThirdPartySignup: boolValueOrDefault(req.ForceEmailOnThirdPartySignup, previousAuthSourceDefaults.ForceEmailOnThirdPartySignup),
 	}
 	if err := h.settingService.UpdateSettingsWithAuthSourceDefaults(c.Request.Context(), settings, authSourceDefaults); err != nil {
@@ -1890,6 +2005,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 	h.ensureDingTalkSyncAttributes(c.Request.Context(), updatedSettings)
+	h.ensureFeishuSyncAttributes(c.Request.Context(), updatedSettings)
 	updatedAuthSourceDefaults, err := h.settingService.GetAuthSourceDefaultSettings(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -1957,6 +2073,17 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DingTalkConnectSyncCorpEmailAttrName:   updatedSettings.DingTalkConnectSyncCorpEmailAttrName,
 		DingTalkConnectSyncDisplayNameAttrName: updatedSettings.DingTalkConnectSyncDisplayNameAttrName,
 		DingTalkConnectSyncDeptAttrName:        updatedSettings.DingTalkConnectSyncDeptAttrName,
+		FeishuConnectEnabled:                   updatedSettings.FeishuConnectEnabled,
+		FeishuConnectRedirectURL:               updatedSettings.FeishuConnectRedirectURL,
+		FeishuConnectTenantOptions:             feishuTenantOptionsForResponse(updatedSettings.FeishuConnectTenantOptions),
+		FeishuConnectBypassRegistration:        updatedSettings.FeishuConnectBypassRegistration,
+		FeishuConnectCorpRestrictionPolicy:     updatedSettings.FeishuConnectCorpRestrictionPolicy,
+		FeishuConnectSyncCorpEmail:             updatedSettings.FeishuConnectSyncCorpEmail,
+		FeishuConnectSyncDisplayName:           updatedSettings.FeishuConnectSyncDisplayName,
+		FeishuConnectSyncCorpEmailAttrKey:      updatedSettings.FeishuConnectSyncCorpEmailAttrKey,
+		FeishuConnectSyncDisplayNameAttrKey:    updatedSettings.FeishuConnectSyncDisplayNameAttrKey,
+		FeishuConnectSyncCorpEmailAttrName:     updatedSettings.FeishuConnectSyncCorpEmailAttrName,
+		FeishuConnectSyncDisplayNameAttrName:   updatedSettings.FeishuConnectSyncDisplayNameAttrName,
 		WeChatConnectEnabled:                   updatedSettings.WeChatConnectEnabled,
 		WeChatConnectAppID:                     updatedSettings.WeChatConnectAppID,
 		WeChatConnectAppSecretConfigured:       updatedSettings.WeChatConnectAppSecretConfigured,
@@ -2106,6 +2233,69 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		payload.DefaultPlatformQuotas = platformQuotas
 	}
 	response.Success(c, systemSettingsResponseData(payload, updatedAuthSourceDefaults))
+}
+
+func normalizeFeishuTenantOptionsForRequest(options, previousOptions []service.FeishuOAuthTenantOption) []service.FeishuOAuthTenantOption {
+	normalized := make([]service.FeishuOAuthTenantOption, 0, len(options))
+	seen := make(map[string]struct{}, len(options))
+	previousSecretsByTenantKey := make(map[string]string, len(previousOptions))
+	previousSecretsByIndex := make(map[int]string, len(previousOptions))
+	for index, option := range previousOptions {
+		clientSecret := strings.TrimSpace(option.ClientSecret)
+		if clientSecret == "" {
+			continue
+		}
+		previousSecretsByIndex[index] = clientSecret
+		if tenantKey := strings.TrimSpace(option.TenantKey); tenantKey != "" {
+			previousSecretsByTenantKey[tenantKey] = clientSecret
+		}
+	}
+	for index, option := range options {
+		tenantKey := strings.TrimSpace(option.TenantKey)
+		if tenantKey == "" {
+			continue
+		}
+		if _, ok := seen[tenantKey]; ok {
+			continue
+		}
+		seen[tenantKey] = struct{}{}
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			name = tenantKey
+		}
+		clientID := strings.TrimSpace(option.ClientID)
+		clientSecret := strings.TrimSpace(option.ClientSecret)
+		if clientSecret == "" {
+			clientSecret = previousSecretsByTenantKey[tenantKey]
+		}
+		if clientSecret == "" && option.ClientSecretConfigured {
+			clientSecret = previousSecretsByIndex[index]
+		}
+		normalized = append(normalized, service.FeishuOAuthTenantOption{
+			Name:                   name,
+			TenantKey:              tenantKey,
+			ClientID:               clientID,
+			ClientSecret:           clientSecret,
+			ClientSecretConfigured: clientSecret != "",
+			GroupID:                option.GroupID,
+		})
+	}
+	return normalized
+}
+
+func feishuTenantOptionsForResponse(options []service.FeishuOAuthTenantOption) []service.FeishuOAuthTenantOption {
+	result := make([]service.FeishuOAuthTenantOption, 0, len(options))
+	for _, option := range options {
+		clientSecret := strings.TrimSpace(option.ClientSecret)
+		result = append(result, service.FeishuOAuthTenantOption{
+			Name:                   strings.TrimSpace(option.Name),
+			TenantKey:              strings.TrimSpace(option.TenantKey),
+			ClientID:               strings.TrimSpace(option.ClientID),
+			ClientSecretConfigured: option.ClientSecretConfigured || clientSecret != "",
+			GroupID:                option.GroupID,
+		})
+	}
+	return result
 }
 
 // hasPaymentFields returns true if any payment-related field was explicitly provided.
@@ -2746,6 +2936,11 @@ func systemSettingsResponseData(settings dto.SystemSettings, authSourceDefaults 
 	data["auth_source_default_google_subscriptions"] = authSourceDefaults.Google.Subscriptions
 	data["auth_source_default_google_grant_on_signup"] = authSourceDefaults.Google.GrantOnSignup
 	data["auth_source_default_google_grant_on_first_bind"] = authSourceDefaults.Google.GrantOnFirstBind
+	data["auth_source_default_feishu_balance"] = authSourceDefaults.Feishu.Balance
+	data["auth_source_default_feishu_concurrency"] = authSourceDefaults.Feishu.Concurrency
+	data["auth_source_default_feishu_subscriptions"] = authSourceDefaults.Feishu.Subscriptions
+	data["auth_source_default_feishu_grant_on_signup"] = authSourceDefaults.Feishu.GrantOnSignup
+	data["auth_source_default_feishu_grant_on_first_bind"] = authSourceDefaults.Feishu.GrantOnFirstBind
 	data["auth_source_default_email_platform_quotas"] = authSourceDefaults.Email.PlatformQuotas
 	data["auth_source_default_linuxdo_platform_quotas"] = authSourceDefaults.LinuxDo.PlatformQuotas
 	data["auth_source_default_oidc_platform_quotas"] = authSourceDefaults.OIDC.PlatformQuotas
@@ -2753,6 +2948,7 @@ func systemSettingsResponseData(settings dto.SystemSettings, authSourceDefaults 
 	data["auth_source_default_github_platform_quotas"] = authSourceDefaults.GitHub.PlatformQuotas
 	data["auth_source_default_google_platform_quotas"] = authSourceDefaults.Google.PlatformQuotas
 	data["auth_source_default_dingtalk_platform_quotas"] = authSourceDefaults.DingTalk.PlatformQuotas
+	data["auth_source_default_feishu_platform_quotas"] = authSourceDefaults.Feishu.PlatformQuotas
 	data["force_email_on_third_party_signup"] = authSourceDefaults.ForceEmailOnThirdPartySignup
 
 	return data
@@ -3447,6 +3643,21 @@ func (h *SettingHandler) ensureDingTalkSyncAttributes(ctx context.Context, setti
 	}
 	if settings.DingTalkConnectSyncDept {
 		h.ensureUserAttributeDefinition(ctx, settings.DingTalkConnectSyncDeptAttrKey, settings.DingTalkConnectSyncDeptAttrName, "钉钉 internal_only 登录时同步的完整部门路径（如：公司/研发部）", service.AttributeTypeText)
+	}
+}
+
+// ensureFeishuSyncAttributes 在保存 settings 后，按 admin 配置的 (attr key, attr name)
+// 确保飞书同步所需的用户属性定义已存在。
+// 失败仅记录日志，不阻塞 settings 保存。
+func (h *SettingHandler) ensureFeishuSyncAttributes(ctx context.Context, settings *service.SystemSettings) {
+	if h.userAttributeService == nil || settings == nil {
+		return
+	}
+	if settings.FeishuConnectSyncDisplayName {
+		h.ensureUserAttributeDefinition(ctx, settings.FeishuConnectSyncDisplayNameAttrKey, settings.FeishuConnectSyncDisplayNameAttrName, "飞书登录时同步的飞书姓名", service.AttributeTypeText)
+	}
+	if settings.FeishuConnectSyncCorpEmail {
+		h.ensureUserAttributeDefinition(ctx, settings.FeishuConnectSyncCorpEmailAttrKey, settings.FeishuConnectSyncCorpEmailAttrName, "飞书登录时同步的企业邮箱", service.AttributeTypeEmail)
 	}
 }
 

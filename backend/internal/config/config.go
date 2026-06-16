@@ -29,7 +29,7 @@ const (
 
 // DefaultCSPPolicy is the default Content-Security-Policy with nonce support
 // __CSP_NONCE__ will be replaced with actual nonce at request time by the SecurityHeaders middleware
-const DefaultCSPPolicy = "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+const DefaultCSPPolicy = "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com https://lf-package-cn.feishucdn.com https://lf-package-va.larksuitecdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src 'self' https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com https://passport.feishu.cn https://accounts.feishu.cn https://passport.larksuite.com https://accounts.larksuite.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 // UMQ（用户消息队列）模式常量
 const (
@@ -74,6 +74,7 @@ type Config struct {
 	WeChat                  WeChatConnectConfig           `mapstructure:"wechat_connect"`
 	OIDC                    OIDCConnectConfig             `mapstructure:"oidc_connect"`
 	DingTalk                DingTalkConnectConfig         `mapstructure:"dingtalk_connect"`
+	Feishu                  FeishuConnectConfig           `mapstructure:"feishu_connect"`
 	GitHubOAuth             EmailOAuthProviderConfig      `mapstructure:"github_oauth"`
 	GoogleOAuth             EmailOAuthProviderConfig      `mapstructure:"google_oauth"`
 	Default                 DefaultConfig                 `mapstructure:"default"`
@@ -283,6 +284,50 @@ type DingTalkConnectConfig struct {
 	EnableAttributeSync          bool     `mapstructure:"enable_attribute_sync"`
 	AttributeSyncFields          []string `mapstructure:"attribute_sync_fields"`
 	AttributeSyncOverwritePolicy string   `mapstructure:"attribute_sync_overwrite_policy"`
+}
+
+type FeishuConnectConfig struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Region  string `mapstructure:"region"` // "cn" | "int"，默认 "cn"
+	// ClientID/ClientSecret are runtime fields populated from the selected tenant option.
+	ClientID            string `mapstructure:"-"`
+	ClientSecret        string `mapstructure:"-"`
+	AuthorizeURL        string `mapstructure:"authorize_url"`
+	AppAccessTokenURL   string `mapstructure:"app_access_token_url"`
+	TokenURL            string `mapstructure:"token_url"`
+	UserInfoURL         string `mapstructure:"userinfo_url"`
+	Scopes              string `mapstructure:"scopes"`
+	RedirectURL         string `mapstructure:"redirect_url"`
+	FrontendRedirectURL string `mapstructure:"frontend_redirect_url"`
+
+	BypassRegistration bool `mapstructure:"bypass_registration"`
+
+	// CorpRestrictionPolicy 控制 bypass_registration 的生效条件：
+	//   - "none"（默认）：bypass_registration 不生效
+	//   - "internal_only"：仅当配置了 tenant_options 时 bypass_registration 生效
+	CorpRestrictionPolicy string `mapstructure:"corp_restriction_policy"`
+
+	// 身份同步
+	SyncDisplayName         bool   `mapstructure:"sync_display_name"`
+	SyncCorpEmail           bool   `mapstructure:"sync_corp_email"`
+	SyncDisplayNameAttrKey  string `mapstructure:"sync_display_name_attr_key"`
+	SyncCorpEmailAttrKey    string `mapstructure:"sync_corp_email_attr_key"`
+	SyncDisplayNameAttrName string `mapstructure:"sync_display_name_attr_name"`
+	SyncCorpEmailAttrName   string `mapstructure:"sync_corp_email_attr_name"`
+
+	// 邮箱
+	RequireEmail bool `mapstructure:"require_email"`
+
+	// 多组织登录选项。启用飞书登录时必须至少配置一个组织。
+	TenantOptions []FeishuTenantOptionConfig `mapstructure:"tenant_options"`
+}
+
+type FeishuTenantOptionConfig struct {
+	Name         string `mapstructure:"name"`
+	TenantKey    string `mapstructure:"tenant_key"`
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	GroupID      int64  `mapstructure:"group_id"`
 }
 
 type EmailOAuthProviderConfig struct {
@@ -1447,6 +1492,59 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.OIDC.UserInfoUsernamePath = strings.TrimSpace(cfg.OIDC.UserInfoUsernamePath)
 	cfg.OIDC.UsePKCEExplicit = hasExplicitConfigOrEnv("oidc_connect.use_pkce", "OIDC_CONNECT_USE_PKCE")
 	cfg.OIDC.ValidateIDTokenExplicit = hasExplicitConfigOrEnv("oidc_connect.validate_id_token", "OIDC_CONNECT_VALIDATE_ID_TOKEN")
+	cfg.Feishu.Region = strings.ToLower(strings.TrimSpace(cfg.Feishu.Region))
+	if cfg.Feishu.Region == "int" {
+		// INT/Lark 国际版：用户未显式配置 URL 时自动切换
+		if cfg.Feishu.AuthorizeURL == "" || cfg.Feishu.AuthorizeURL == "https://passport.feishu.cn/suite/passport/oauth/authorize" {
+			cfg.Feishu.AuthorizeURL = "https://passport.larksuite.com/suite/passport/oauth/authorize"
+		}
+		if cfg.Feishu.AppAccessTokenURL == "" || cfg.Feishu.AppAccessTokenURL == "https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal" {
+			cfg.Feishu.AppAccessTokenURL = "https://open.larksuite.com/open-apis/auth/v3/app_access_token/internal"
+		}
+		if cfg.Feishu.TokenURL == "" || cfg.Feishu.TokenURL == "https://open.feishu.cn/open-apis/authen/v1/access_token" {
+			cfg.Feishu.TokenURL = "https://open.larksuite.com/open-apis/authen/v1/access_token"
+		}
+		if cfg.Feishu.UserInfoURL == "" || cfg.Feishu.UserInfoURL == "https://open.feishu.cn/open-apis/authen/v1/user_info" {
+			cfg.Feishu.UserInfoURL = "https://open.larksuite.com/open-apis/authen/v1/user_info"
+		}
+	}
+	cfg.Feishu.ClientID = ""
+	cfg.Feishu.ClientSecret = ""
+	cfg.Feishu.AuthorizeURL = strings.TrimSpace(cfg.Feishu.AuthorizeURL)
+	cfg.Feishu.AppAccessTokenURL = strings.TrimSpace(cfg.Feishu.AppAccessTokenURL)
+	cfg.Feishu.TokenURL = strings.TrimSpace(cfg.Feishu.TokenURL)
+	cfg.Feishu.UserInfoURL = strings.TrimSpace(cfg.Feishu.UserInfoURL)
+	cfg.Feishu.Scopes = strings.TrimSpace(cfg.Feishu.Scopes)
+	cfg.Feishu.RedirectURL = strings.TrimSpace(cfg.Feishu.RedirectURL)
+	cfg.Feishu.FrontendRedirectURL = strings.TrimSpace(cfg.Feishu.FrontendRedirectURL)
+	cfg.Feishu.CorpRestrictionPolicy = strings.ToLower(strings.TrimSpace(cfg.Feishu.CorpRestrictionPolicy))
+	if cfg.Feishu.CorpRestrictionPolicy == "" {
+		cfg.Feishu.CorpRestrictionPolicy = "none"
+	}
+	normalizedFeishuTenantOptions := make([]FeishuTenantOptionConfig, 0, len(cfg.Feishu.TenantOptions))
+	seenFeishuTenantKeys := map[string]struct{}{}
+	for _, option := range cfg.Feishu.TenantOptions {
+		option.Name = strings.TrimSpace(option.Name)
+		option.TenantKey = strings.TrimSpace(option.TenantKey)
+		option.ClientID = strings.TrimSpace(option.ClientID)
+		option.ClientSecret = strings.TrimSpace(option.ClientSecret)
+		if option.TenantKey == "" {
+			continue
+		}
+		if _, ok := seenFeishuTenantKeys[option.TenantKey]; ok {
+			continue
+		}
+		seenFeishuTenantKeys[option.TenantKey] = struct{}{}
+		if option.Name == "" {
+			option.Name = option.TenantKey
+		}
+		normalizedFeishuTenantOptions = append(normalizedFeishuTenantOptions, option)
+	}
+	cfg.Feishu.TenantOptions = normalizedFeishuTenantOptions
+	cfg.Feishu.SyncDisplayNameAttrKey = strings.TrimSpace(cfg.Feishu.SyncDisplayNameAttrKey)
+	cfg.Feishu.SyncCorpEmailAttrKey = strings.TrimSpace(cfg.Feishu.SyncCorpEmailAttrKey)
+	cfg.Feishu.SyncDisplayNameAttrName = strings.TrimSpace(cfg.Feishu.SyncDisplayNameAttrName)
+	cfg.Feishu.SyncCorpEmailAttrName = strings.TrimSpace(cfg.Feishu.SyncCorpEmailAttrName)
 	cfg.Dashboard.KeyPrefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
 	cfg.CORS.AllowedOrigins = normalizeStringSlice(cfg.CORS.AllowedOrigins)
 	cfg.Security.ResponseHeaders.AdditionalAllowed = normalizeStringSlice(cfg.Security.ResponseHeaders.AdditionalAllowed)
@@ -1683,6 +1781,18 @@ func setDefaults() {
 	viper.SetDefault("dingtalk_connect.corp_restriction_policy", "none")
 	viper.SetDefault("dingtalk_connect.require_email", true)
 	viper.SetDefault("dingtalk_connect.username_overwrite_policy", "if_empty")
+
+	// Feishu Connect OAuth 登录
+	viper.SetDefault("feishu_connect.enabled", false)
+	viper.SetDefault("feishu_connect.region", "cn")
+	viper.SetDefault("feishu_connect.authorize_url", "https://passport.feishu.cn/suite/passport/oauth/authorize")
+	viper.SetDefault("feishu_connect.app_access_token_url", "https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal")
+	viper.SetDefault("feishu_connect.token_url", "https://open.feishu.cn/open-apis/authen/v1/access_token")
+	viper.SetDefault("feishu_connect.userinfo_url", "https://open.feishu.cn/open-apis/authen/v1/user_info")
+	viper.SetDefault("feishu_connect.scopes", "")
+	viper.SetDefault("feishu_connect.frontend_redirect_url", "/auth/feishu/callback")
+	viper.SetDefault("feishu_connect.require_email", true)
+	viper.SetDefault("feishu_connect.corp_restriction_policy", "none")
 
 	// Database
 	viper.SetDefault("database.host", "localhost")
@@ -2805,6 +2915,39 @@ func (c *Config) Validate() error {
 	}
 	if err := ValidateDingTalkConfig(c.DingTalk); err != nil {
 		return fmt.Errorf("dingtalk_connect: %w", err)
+	}
+	if c.Feishu.Enabled {
+		if c.Feishu.Region != "" && c.Feishu.Region != "cn" && c.Feishu.Region != "int" {
+			return fmt.Errorf("feishu_connect.region must be 'cn' or 'int', got %q", c.Feishu.Region)
+		}
+		if strings.TrimSpace(c.Feishu.RedirectURL) == "" {
+			return fmt.Errorf("feishu_connect.redirect_url is required when feishu_connect.enabled=true")
+		}
+		if err := ValidateAbsoluteHTTPURL(c.Feishu.AuthorizeURL); err != nil {
+			return fmt.Errorf("feishu_connect.authorize_url invalid: %w", err)
+		}
+		if err := ValidateAbsoluteHTTPURL(c.Feishu.AppAccessTokenURL); err != nil {
+			return fmt.Errorf("feishu_connect.app_access_token_url invalid: %w", err)
+		}
+		if err := ValidateAbsoluteHTTPURL(c.Feishu.TokenURL); err != nil {
+			return fmt.Errorf("feishu_connect.token_url invalid: %w", err)
+		}
+		if err := ValidateAbsoluteHTTPURL(c.Feishu.UserInfoURL); err != nil {
+			return fmt.Errorf("feishu_connect.userinfo_url invalid: %w", err)
+		}
+		if err := ValidateAbsoluteHTTPURL(c.Feishu.RedirectURL); err != nil {
+			return fmt.Errorf("feishu_connect.redirect_url invalid: %w", err)
+		}
+		if err := ValidateFrontendRedirectURL(c.Feishu.FrontendRedirectURL); err != nil {
+			return fmt.Errorf("feishu_connect.frontend_redirect_url invalid: %w", err)
+		}
+		if err := ValidateFeishuConfig(c.Feishu); err != nil {
+			return fmt.Errorf("feishu_connect: %w", err)
+		}
+		policy := strings.TrimSpace(c.Feishu.CorpRestrictionPolicy)
+		if policy != "" && policy != "none" && policy != "internal_only" {
+			return fmt.Errorf("feishu_connect.corp_restriction_policy must be 'none' or 'internal_only', got %q", policy)
+		}
 	}
 	return nil
 }

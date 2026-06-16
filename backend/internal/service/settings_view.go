@@ -66,6 +66,19 @@ type SystemSettings struct {
 	DingTalkConnectSyncDisplayNameAttrName string
 	DingTalkConnectSyncDeptAttrName        string
 
+	// Feishu Connect OAuth 登录
+	FeishuConnectEnabled                 bool
+	FeishuConnectRedirectURL             string
+	FeishuConnectTenantOptions           []FeishuOAuthTenantOption
+	FeishuConnectBypassRegistration      bool
+	FeishuConnectCorpRestrictionPolicy   string
+	FeishuConnectSyncDisplayName         bool
+	FeishuConnectSyncCorpEmail           bool
+	FeishuConnectSyncDisplayNameAttrKey  string
+	FeishuConnectSyncCorpEmailAttrKey    string
+	FeishuConnectSyncDisplayNameAttrName string
+	FeishuConnectSyncCorpEmailAttrName   string
+
 	// WeChat Connect OAuth 登录
 	WeChatConnectEnabled                   bool
 	WeChatConnectAppID                     string
@@ -267,6 +280,8 @@ type PublicSettings struct {
 
 	LinuxDoOAuthEnabled      bool
 	DingTalkOAuthEnabled     bool
+	FeishuOAuthEnabled       bool
+	FeishuOAuthTenants       []FeishuOAuthTenantOption
 	WeChatOAuthEnabled       bool
 	WeChatOAuthOpenEnabled   bool
 	WeChatOAuthMPEnabled     bool
@@ -299,6 +314,15 @@ type PublicSettings struct {
 
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`
+}
+
+type FeishuOAuthTenantOption struct {
+	Name                   string `json:"name"`
+	TenantKey              string `json:"tenant_key"`
+	ClientID               string `json:"client_id,omitempty"`
+	ClientSecret           string `json:"client_secret,omitempty"`
+	ClientSecretConfigured bool   `json:"client_secret_configured,omitempty"`
+	GroupID                int64  `json:"group_id,omitempty"`
 }
 
 type LoginAgreementDocument struct {

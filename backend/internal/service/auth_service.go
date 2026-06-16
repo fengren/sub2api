@@ -568,17 +568,25 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 	return token, user, nil
 }
 
-// canBypassRegistrationDisabledForOAuth 在钉钉企业模式（internal_only）且
-// dingtalk_connect_bypass_registration=true 时，允许跳过全局 registration_enabled 检查。
+// canBypassRegistrationDisabledForOAuth 在企业内部模式且对应 provider 开启 bypass_registration 时，
+// 允许跳过全局 registration_enabled 检查。
 func (s *AuthService) canBypassRegistrationDisabledForOAuth(ctx context.Context, signupSource string) bool {
-	if signupSource != "dingtalk" {
+	switch strings.TrimSpace(strings.ToLower(signupSource)) {
+	case "dingtalk":
+		cfg, err := s.settingService.GetDingTalkConnectOAuthConfig(ctx)
+		if err != nil || !cfg.Enabled || !cfg.BypassRegistration {
+			return false
+		}
+		return cfg.CorpRestrictionPolicy == "internal_only"
+	case "feishu":
+		cfg, err := s.settingService.GetFeishuConnectOAuthConfig(ctx)
+		if err != nil || !cfg.Enabled || !cfg.BypassRegistration {
+			return false
+		}
+		return cfg.CorpRestrictionPolicy == "internal_only" && len(cfg.TenantOptions) > 0
+	default:
 		return false
 	}
-	cfg, err := s.settingService.GetDingTalkConnectOAuthConfig(ctx)
-	if err != nil || !cfg.Enabled || !cfg.BypassRegistration {
-		return false
-	}
-	return cfg.CorpRestrictionPolicy == "internal_only"
 }
 
 // LoginOrRegisterOAuthWithTokenPair 用于第三方 OAuth/SSO 登录，返回完整的 TokenPair。
@@ -832,6 +840,8 @@ func authSourceSignupSettings(defaults *AuthSourceDefaultSettings, signupSource 
 		return defaults.Google, true
 	case "dingtalk":
 		return defaults.DingTalk, true
+	case "feishu":
+		return defaults.Feishu, true
 	default:
 		return ProviderDefaultGrantSettings{}, false
 	}
@@ -1045,6 +1055,8 @@ func (s *AuthService) ensureEmailAuthIdentity(ctx context.Context, user *User, s
 func inferLegacySignupSource(email string) string {
 	normalized := strings.ToLower(strings.TrimSpace(email))
 	switch {
+	case strings.HasSuffix(normalized, FeishuConnectSyntheticEmailDomain):
+		return "feishu"
 	case strings.HasSuffix(normalized, DingTalkConnectSyntheticEmailDomain):
 		return "dingtalk"
 	case strings.HasSuffix(normalized, LinuxDoConnectSyntheticEmailDomain):
@@ -1142,7 +1154,8 @@ func isReservedEmail(email string) bool {
 	return strings.HasSuffix(normalized, LinuxDoConnectSyntheticEmailDomain) ||
 		strings.HasSuffix(normalized, OIDCConnectSyntheticEmailDomain) ||
 		strings.HasSuffix(normalized, WeChatConnectSyntheticEmailDomain) ||
-		strings.HasSuffix(normalized, DingTalkConnectSyntheticEmailDomain)
+		strings.HasSuffix(normalized, DingTalkConnectSyntheticEmailDomain) ||
+		strings.HasSuffix(normalized, FeishuConnectSyntheticEmailDomain)
 }
 
 // GenerateToken 生成JWT access token

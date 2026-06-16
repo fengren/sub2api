@@ -129,6 +129,25 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/auth/feishu/callback',
+    name: 'FeishuOAuthCallback',
+    component: () => import('@/views/auth/FeishuCallbackView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Feishu OAuth Callback',
+      titleKey: 'auth.feishuCallbackPageTitle'
+    }
+  },
+  {
+    path: '/auth/feishu/email-completion',
+    name: 'feishu-email-completion',
+    component: () => import('@/views/auth/FeishuCallbackView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Feishu Email Completion'
+    }
+  },
+  {
     path: '/auth/oidc/callback',
     name: 'OIDCOAuthCallback',
     component: () => import('@/views/auth/OidcCallbackView.vue'),
@@ -696,6 +715,8 @@ const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/linuxdo/callback',
   '/auth/dingtalk/callback',
   '/auth/dingtalk/email-completion',
+  '/auth/feishu/callback',
+  '/auth/feishu/email-completion',
   '/auth/oidc/callback',
   '/auth/wechat/callback',
   '/auth/wechat/payment/callback',
