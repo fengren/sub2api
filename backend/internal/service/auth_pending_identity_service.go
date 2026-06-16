@@ -324,6 +324,32 @@ func (s *AuthPendingIdentityService) GetBrowserSession(ctx context.Context, sess
 	return session, nil
 }
 
+// GetSessionByToken looks up a pending auth session by token only,
+// without browser session key validation. Use when the session token
+// is provided through a trusted out-of-band channel (e.g. URL fragment).
+func (s *AuthPendingIdentityService) GetSessionByToken(ctx context.Context, sessionToken string) (*dbent.PendingAuthSession, error) {
+	if s == nil || s.entClient == nil {
+		return nil, fmt.Errorf("pending auth ent client is not configured")
+	}
+
+	session, err := s.getBrowserSession(ctx, sessionToken)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	if session.ConsumedAt != nil {
+		return nil, ErrPendingAuthSessionConsumed
+	}
+	if !session.ExpiresAt.IsZero() && now.After(session.ExpiresAt) {
+		return nil, ErrPendingAuthSessionExpired
+	}
+	if session.CompletionCodeExpiresAt != nil && now.After(*session.CompletionCodeExpiresAt) {
+		return nil, ErrPendingAuthSessionExpired
+	}
+	return session, nil
+}
+
 func (s *AuthPendingIdentityService) getBrowserSession(ctx context.Context, sessionToken string) (*dbent.PendingAuthSession, error) {
 	if s == nil || s.entClient == nil {
 		return nil, fmt.Errorf("pending auth ent client is not configured")

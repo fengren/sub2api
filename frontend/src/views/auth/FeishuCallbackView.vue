@@ -663,7 +663,7 @@ async function handleSubmitInvitation() {
 async function handleContinueLogin() {
   isSubmitting.value = true
   try {
-    const completion = await exchangePendingOAuthCompletion(currentAdoptionDecision()) as FeishuPendingActionResponse
+    const completion = await exchangePendingOAuthCompletion(currentAdoptionDecision(), legacyPendingOAuthToken.value || undefined) as FeishuPendingActionResponse
     await finalizePendingAccountResponse(completion)
   } catch (e: unknown) {
     errorMessage.value = getRequestErrorMessage(e, t('auth.loginFailed'))
@@ -746,6 +746,9 @@ onMounted(async () => {
   const params = parseFragmentParams()
   const legacyLogin = readLegacyFragmentLogin(params)
   const legacyPendingToken = params.get('pending_oauth_token')?.trim() || ''
+  if (legacyPendingToken) {
+    legacyPendingOAuthToken.value = legacyPendingToken
+  }
   const error = params.get('error')
   const errorDesc = params.get('error_description') || params.get('error_message') || ''
   const redirect = sanitizeRedirectPath(
@@ -777,7 +780,7 @@ onMounted(async () => {
       return
     }
 
-    const completion = await exchangePendingOAuthCompletion()
+    const completion = await exchangePendingOAuthCompletion(undefined, legacyPendingOAuthToken.value || undefined)
     const completionRedirect = sanitizeRedirectPath(
       completion.redirect || (route.query.redirect as string | undefined) || '/dashboard'
     )

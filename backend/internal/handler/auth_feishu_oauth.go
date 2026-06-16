@@ -658,7 +658,7 @@ func (h *AuthHandler) FeishuOAuthCallback(c *gin.Context) {
 		if qrTicketID != "" {
 			_ = feishuQRStore.MarkConfirmedWithSession(c.Request.Context(), qrTicketID, "", redirectTo, sessionToken)
 		}
-		redirectToFrontendCallback(c, frontendCallback)
+		redirectToFrontendCallbackWithToken(c, frontendCallback, sessionToken)
 		return
 	}
 
@@ -676,7 +676,7 @@ func (h *AuthHandler) FeishuOAuthCallback(c *gin.Context) {
 		if qrTicketID != "" {
 			_ = feishuQRStore.MarkConfirmedWithSession(c.Request.Context(), qrTicketID, "", redirectTo, sessionToken)
 		}
-		redirectToFrontendCallback(c, frontendCallback)
+		redirectToFrontendCallbackWithToken(c, frontendCallback, sessionToken)
 		return
 	}
 
@@ -689,7 +689,7 @@ func (h *AuthHandler) FeishuOAuthCallback(c *gin.Context) {
 	if qrTicketID != "" {
 		_ = feishuQRStore.MarkConfirmedWithSession(c.Request.Context(), qrTicketID, "", redirectTo, sessionToken)
 	}
-	redirectToFrontendCallback(c, frontendCallback)
+	redirectToFrontendCallbackWithToken(c, frontendCallback, sessionToken)
 }
 
 func (h *AuthHandler) createFeishuDirectLoginPendingSession(

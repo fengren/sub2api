@@ -668,19 +668,27 @@ export async function createPendingFeishuOAuthAccount(
 }
 
 export async function completePendingOAuthBindLogin(
-  decision?: OAuthAdoptionDecision
+  decision?: OAuthAdoptionDecision,
+  pendingOAuthToken?: string
 ): Promise<PendingOAuthBindLoginResponse> {
+  const body: Record<string, unknown> = {
+    ...serializeOAuthAdoptionDecision(decision)
+  }
+  if (pendingOAuthToken) {
+    body.pending_oauth_token = pendingOAuthToken
+  }
   const { data } = await apiClient.post<PendingOAuthBindLoginResponse>(
     '/auth/oauth/pending/exchange',
-    serializeOAuthAdoptionDecision(decision)
+    body
   )
   return data
 }
 
 export async function exchangePendingOAuthCompletion(
-  decision?: OAuthAdoptionDecision
+  decision?: OAuthAdoptionDecision,
+  pendingOAuthToken?: string
 ): Promise<PendingOAuthExchangeResponse> {
-  return completePendingOAuthBindLogin(decision)
+  return completePendingOAuthBindLogin(decision, pendingOAuthToken)
 }
 
 export const authAPI = {
