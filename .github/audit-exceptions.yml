@@ -35,3 +35,10 @@ exceptions:
     mitigation: "Proxy configuration not user-controlled; upgrade when axios releases fix"
     expires_on: "2026-07-10"
     owner: "security@your-domain"
+  - package: form-data
+    advisory: "GHSA-hmw2-7cc7-3qxx"
+    severity: high
+    reason: "Transitive dependency via axios and vitest/jsdom; no user-controlled multipart field names"
+    mitigation: "API calls use known endpoints with server-defined form fields; upgrade when axios patches"
+    expires_on: "2026-07-10"
+    owner: "security@your-domain"
